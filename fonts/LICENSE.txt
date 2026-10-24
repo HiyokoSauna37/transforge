@@ -1,0 +1,9 @@
+M PLUS Rounded 1c (Regular / Bold) — Google Fonts 配布版を woff2 にサブセットして同梱
+取得元: https://github.com/google/fonts/tree/main/ofl/mplusrounded1c
+
+Copyright: Copyright 2016 The Rounded M+ Project Authors.
+License: This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL
+License URL: http://scripts.sil.org/OFL
+
+サブセット範囲: Latin / 一般句読点 / 矢印 / 図形 / Dingbats / かな / CJK 統合漢字 / 全角形（pyftsubset, --no-hinting）
+用途: 拡張 UI（ポップアップ・設定・ページ内バッジ/パネル）のみ。翻訳したページ本文のフォントは変更しない。

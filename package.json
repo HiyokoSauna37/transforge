@@ -1,0 +1,16 @@
+{
+  "name": "transforge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension: translate pages with the Claude API (personal use)",
+  "scripts": {
+    "icons": "python tools/make_icons.py",
+    "check": "node tools/check.mjs",
+    "test": "node tests/e2e.mjs",
+    "real": "node tests/real_api_check.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.0"
+  }
+}

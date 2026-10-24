@@ -1,0 +1,16 @@
+body{width:326px;min-height:200px}
+.wrap{padding:16px 16px 12px}
+.status{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--ink-2)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--line-2);flex:none}
+.dot.idle{background:var(--line-2)}
+.dot.running{background:var(--warn);animation:pulse 1.1s ease-in-out infinite}
+.dot.translated{background:var(--ok)}
+@keyframes pulse{50%{opacity:.35}}
+.bar{height:4px;background:var(--bg-2);border-radius:999px;margin:10px 0 14px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:999px;transition:width .25s}
+.btnrow .btn{width:100%;justify-content:center}
+.usage{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:.78rem;color:var(--ink-2)}
+.usage div{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-top:2px}
+.usage .k{flex:none;white-space:nowrap;color:var(--muted)}
+.usage div span:last-child{text-align:right;word-break:break-word}
+.foot{display:flex;justify-content:space-between;align-items:center;font-size:.78rem;padding:4px 4px 0}

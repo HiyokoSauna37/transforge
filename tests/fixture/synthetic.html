@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Synthetic fixture</title>
+<style>.hidden{display:none}</style>
+</head>
+<body>
+<h1 id="h1">Component <em>Options</em></h1>
+
+<p id="reorder">See <a href="/docs" id="l1">the documentation</a> for <a href="/details" id="l2">details</a>.</p>
+
+<p id="nested">Set the <a href="/opt"><code>as2From</code> header</a> to the <strong>sender</strong> value.</p>
+
+<p id="br">First line<br>Second line</p>
+
+<p id="code-only"><code>only code</code></p>
+
+<p id="notrans" translate="no">Do not translate me</p>
+<p class="notranslate" id="notrans2">Nor me</p>
+
+<div class="hidden" id="hidden"><p>Hidden paragraph should stay</p></div>
+
+<pre id="pre">&lt;dependency&gt;
+  &lt;artifactId&gt;camel-as2&lt;/artifactId&gt;
+&lt;/dependency&gt;</pre>
+
+<ul id="list">
+  <li>Item one</li>
+  <li>Item two with <a href="/x">a link</a>
+    <ul><li>Nested item</li></ul>
+  </li>
+</ul>
+
+<table id="table"><thead><tr><th>Name</th><th>Type</th></tr></thead>
+<tbody><tr><td><strong>bridgeErrorHandler</strong> (consumer)</td><td>String</td></tr>
+<tr><td>false</td><td>boolean</td></tr></tbody></table>
+
+<details id="details"><summary>More</summary><p id="details-p">Collapsed content</p></details>
+
+<nav id="nav"><a href="/nav1">Nav link one</a> <a href="/nav2">Nav link two</a></nav>
+
+<p id="jp">これは既に日本語の文です。</p>
+<p id="sym">— • —</p>
+<p id="num">12345</p>
+
+<button id="btn">Click me</button>
+
+<div id="mixed">Leading text <span>inline span</span>
+  <div>Inner block paragraph</div>
+  trailing text</div>
+
+<div id="shadow-host"></div>
+<script>
+  const host = document.getElementById("shadow-host");
+  const root = host.attachShadow({ mode: "open" });
+  root.innerHTML = "<p id='shadow-p'>Shadow paragraph</p>";
+</script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>TransForge</title>
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <img class="mark" src="../icons/icon48.png" alt="">
+    <div>
+      <h1>TransForge</h1>
+      <div class="sub">Claude で、読みやすい日本語に</div>
+    </div>
+  </header>
+
+  <section class="card" id="nokey" hidden>
+    <p class="warn">API キーがまだ登録されていません。</p>
+    <button class="btn small" id="openOptions1">設定を開く</button>
+  </section>
+
+  <section class="card" id="unsupported" hidden>
+    <p class="muted">このページでは使えません（chrome:// やストアなど）。</p>
+  </section>
+
+  <section class="card" id="main" hidden>
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">--</span>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="btnrow">
+      <button class="btn" id="translate">このページを翻訳</button>
+      <button class="btn ghost" id="restore" hidden>原文に戻す</button>
+      <button class="btn danger small" id="cancel" hidden>中止</button>
+    </div>
+    <p class="err" id="err" hidden></p>
+
+    <div class="row">
+      <label class="lbl">表示</label>
+      <div class="seg" id="modeSeg">
+        <button data-mode="replace" class="segbtn">置き換え</button>
+        <button data-mode="bilingual" class="segbtn">対訳</button>
+      </div>
+    </div>
+    <div class="row">
+      <label class="lbl" for="lang">言語</label>
+      <select id="lang"></select>
+    </div>
+    <div class="row">
+      <label class="lbl" for="model">モデル</label>
+      <select id="model"></select>
+    </div>
+    <label class="check"><input type="checkbox" id="autoHost"><span class="box"></span><span id="autoHostLabel">このサイトは常に翻訳</span></label>
+
+    <div class="usage">
+      <div><span class="k">このページ</span><span id="pageCost">--</span></div>
+      <div><span class="k">累計</span><span id="totalCost">--</span></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <button class="link" id="openOptions2">設定</button>
+    <span class="dim">Alt+T で切り替え</span>
+  </footer>
+</div>
+<script type="module" src="popup.js"></script>
+</body>
+</html>

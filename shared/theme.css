@@ -1,0 +1,137 @@
+/* TransForge 共通テーマ — Claude 風の暖かいトーン（クリーム地 × テラコッタ）＋丸ゴシック */
+@font-face{font-family:"TransForge Rounded";font-weight:400;font-style:normal;font-display:swap;
+  src:url(../fonts/MPLUSRounded1c-Regular.woff2) format("woff2")}
+@font-face{font-family:"TransForge Rounded";font-weight:700;font-style:normal;font-display:swap;
+  src:url(../fonts/MPLUSRounded1c-Bold.woff2) format("woff2")}
+:root{
+  --bg:#FAF9F5;
+  --bg-2:#F2F0E9;
+  --panel:#FFFFFF;
+  --line:#E7E4DB;
+  --line-2:#D8D4C8;
+  --ink:#1F1E1D;
+  --ink-2:#5E5C57;
+  --muted:#8E8B82;
+  --accent:#D97757;
+  --accent-2:#C4623F;
+  --accent-soft:#F7E9E1;
+  --ok:#5B8A5F;
+  --ok-soft:#E9F1E8;
+  --warn:#A8761F;
+  --warn-soft:#F8EFD9;
+  --err:#C0493D;
+  --err-soft:#F9E6E3;
+  --radius:16px;
+  --radius-s:10px;
+  --shadow:0 1px 2px rgba(31,30,29,.04), 0 8px 24px rgba(31,30,29,.06);
+  --sans:"TransForge Rounded","M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+  --display:"TransForge Rounded","M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+  --mono:"SF Mono","Cascadia Mono","Consolas",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#262624;
+    --bg-2:#2E2D2A;
+    --panel:#30302E;
+    --line:#3E3D39;
+    --line-2:#4C4A45;
+    --ink:#ECEAE3;
+    --ink-2:#B8B5AC;
+    --muted:#8C8982;
+    --accent:#D97757;
+    --accent-2:#E38A6C;
+    --accent-soft:#473730;
+    --ok-soft:#2F3A30;
+    --warn-soft:#3F3728;
+    --err-soft:#45302D;
+    --shadow:0 1px 2px rgba(0,0,0,.25), 0 8px 24px rgba(0,0,0,.28);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  line-height:1.7;
+  letter-spacing:.015em;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--accent-soft);color:var(--ink)}
+.mono{font-family:var(--mono)}
+.dim,.muted{color:var(--muted)}
+.small{font-size:.8rem}
+
+/* ヘッダー */
+.mast{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.mast .mark{width:36px;height:36px;border-radius:10px;flex:none;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.mast h1{font-family:var(--display);font-weight:700;font-size:1.35rem;letter-spacing:.03em;line-height:1.2;color:var(--ink)}
+.mast .sub{font-size:.8rem;color:var(--muted);margin-top:2px}
+.mast .spacer{flex:1}
+
+/* カード */
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:18px 20px;
+  margin-bottom:14px;
+}
+.card h2{font-family:var(--display);font-weight:700;font-size:1.08rem;letter-spacing:.02em;margin-bottom:6px;color:var(--ink)}
+.card h2 + .lead{color:var(--ink-2);font-size:.86rem;margin-bottom:8px}
+
+/* ボタン */
+button{font-family:var(--sans);cursor:pointer}
+.btn{
+  background:var(--accent);color:#fff;border:1px solid transparent;
+  padding:9px 18px;font-size:.92rem;font-weight:600;border-radius:var(--radius-s);
+  transition:background .12s, box-shadow .12s, transform .05s;
+}
+.btn:hover{background:var(--accent-2);box-shadow:0 2px 10px rgba(217,119,87,.28)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+.btn.ghost{background:var(--panel);border-color:var(--line-2);color:var(--ink);font-weight:500}
+.btn.ghost:hover{background:var(--bg-2);box-shadow:none}
+.btn.danger{background:var(--err-soft);color:var(--err);font-weight:500}
+.btn.danger:hover{background:var(--err);color:#fff;box-shadow:none}
+.btn.small{padding:5px 12px;font-size:.8rem}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.link{background:none;border:none;color:var(--ink-2);font-size:.82rem;padding:0;border-radius:6px}
+.link:hover{color:var(--accent)}
+
+/* 入力 */
+select,input[type=text],input[type=password],input[type=number],textarea{
+  font-family:var(--sans);font-size:.9rem;color:var(--ink);background:var(--panel);
+  border:1px solid var(--line-2);border-radius:var(--radius-s);padding:8px 11px;outline:none;width:100%;
+  transition:border-color .12s, box-shadow .12s;
+}
+select:focus,input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+input::placeholder,textarea::placeholder{color:var(--muted)}
+select{appearance:none;-webkit-appearance:none;
+  background-image:linear-gradient(45deg, transparent 50%, var(--muted) 50%),linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:calc(100% - 16px) 55%, calc(100% - 11px) 55%;background-size:5px 5px;background-repeat:no-repeat;padding-right:30px}
+textarea{resize:vertical;min-height:76px;line-height:1.6}
+.row{display:flex;align-items:center;gap:10px;margin-top:10px}
+.row .lbl{flex:none;width:50px;font-size:.8rem;color:var(--muted)}
+.row > select,.row > input{flex:1}
+
+/* セグメント */
+.seg{display:flex;background:var(--bg-2);border-radius:999px;padding:3px;flex:1}
+.segbtn{flex:1;background:transparent;border:none;color:var(--ink-2);padding:6px 8px;font-size:.84rem;border-radius:999px;transition:all .12s}
+.segbtn.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(31,30,29,.12);font-weight:600}
+.segbtn:hover:not(.on){color:var(--ink)}
+
+/* チェックボックス */
+.check{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.88rem;margin-top:12px;user-select:none;color:var(--ink)}
+.check input{position:absolute;opacity:0;pointer-events:none}
+.check .box{width:17px;height:17px;border:1.5px solid var(--line-2);border-radius:5px;flex:none;position:relative;background:var(--panel);transition:all .12s}
+.check input:checked + .box{background:var(--accent);border-color:var(--accent)}
+.check input:checked + .box::after{content:"";position:absolute;left:5px;top:2px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(42deg)}
+.check input:focus-visible + .box{box-shadow:0 0 0 3px var(--accent-soft)}
+
+.err{color:var(--err);font-size:.82rem;margin-top:8px;white-space:pre-wrap}
+.ok{color:var(--ok);font-size:.82rem;margin-top:8px}
+.warn{color:var(--warn);font-size:.88rem;margin-bottom:8px}
+.help{color:var(--muted);font-size:.78rem;margin-top:5px;line-height:1.6}
+.help code{font-family:var(--mono);color:var(--ink-2);background:var(--bg-2);padding:0 4px;border-radius:4px}
