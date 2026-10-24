@@ -30,7 +30,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/segmenter.js", "content/content.js"],
+      "js": ["content/segmenter.js", "content/ui.js", "content/content.js"],
       "css": ["content/content.css"],
       "run_at": "document_idle"
     }

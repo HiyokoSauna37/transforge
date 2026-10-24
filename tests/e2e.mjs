@@ -1,20 +1,9 @@
 // E2E: 拡張を Chromium に読み込み、モック API に対してページ翻訳 / 復元 / 対訳 / 選択翻訳を検証
 // usage: npm test  （playwright-core と chromium が必要: npm i && npx playwright install chromium）
-import { join, dirname } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { startServer, stats } from "./mock_server.mjs";
-
-const here = dirname(fileURLToPath(import.meta.url));
-const EXT = join(here, "..");
-// playwright-core は node_modules から解決（PW_PATH=<playwright-core/index.mjs> で別の場所を指定可）
-const { chromium } = process.env.PW_PATH
-  ? await import(pathToFileURL(process.env.PW_PATH).href)
-  : await import("playwright-core").catch(() => {
-      console.error("playwright-core が見つかりません: npm i && npx playwright install chromium を実行するか、PW_PATH を指定してください");
-      process.exit(2);
-    });
+import { launch } from "./harness.mjs";
 
 let failures = 0;
 let step = "start";
@@ -29,16 +18,9 @@ const { server, port } = await startServer();
 const BASE = `http://127.0.0.1:${port}`;
 log(`mock server ${BASE}`);
 
-const userDataDir = mkdtempSync(join(tmpdir(), "tf-e2e-"));
 log("launching chromium");
-const ctx = await chromium.launchPersistentContext(userDataDir, {
-  headless: process.env.E2E_HEADED ? false : true,
-  channel: "chromium",
-  args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
-});
-log("waiting for service worker");
-let [sw] = ctx.serviceWorkers();
-if (!sw) sw = await ctx.waitForEvent("serviceworker", { timeout: 30000 });
+const h = await launch({ headless: !process.env.E2E_HEADED, prefix: "tf-e2e-" });
+const { ctx, sw, extId, clearCache, tabIdOf, waitContent, msg } = h;
 log(`service worker: ${sw.url()}`);
 
 const baseSettings = {
@@ -46,35 +28,7 @@ const baseSettings = {
   displayMode: "replace", customInstructions: "", glossary: "", batchChars: 2500, concurrency: 4,
   cacheEnabled: true, skipNav: true, autoHosts: [], usdJpy: 150,
 };
-async function setSettings(partial) {
-  await sw.evaluate(async (s) => { await chrome.storage.local.set({ settings: s }); }, { ...baseSettings, ...partial });
-}
-async function clearCache() {
-  // 拡張側は versionchange で接続を閉じるので、削除完了（onsuccess）まで待てる
-  await sw.evaluate(() => new Promise((r) => {
-    const q = indexedDB.deleteDatabase("transforge");
-    q.onsuccess = q.onerror = () => r("done");
-    setTimeout(() => r("timeout"), 5000);
-  }));
-}
-async function tabIdOf(page) {
-  const url = page.url();
-  for (let i = 0; i < 50; i++) {
-    const id = await sw.evaluate(async (u) => { const tabs = await chrome.tabs.query({}); const t = tabs.find((x) => x.url === u); return t ? t.id : null; }, url);
-    if (id != null) return id;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error("tab not found");
-}
-async function waitContent(tabId) {
-  for (let i = 0; i < 50; i++) {
-    const ok = await sw.evaluate(async (id) => { try { const r = await chrome.tabs.sendMessage(id, { type: "tf:ping" }); return !!(r && r.ok); } catch { return false; } }, tabId);
-    if (ok) return;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error("content script not ready");
-}
-const msg = (tabId, m) => sw.evaluate(([id, m]) => chrome.tabs.sendMessage(id, m), [tabId, m]);
+const setSettings = (partial) => h.setSettings({ ...baseSettings, ...partial });
 
 // ---------------- synthetic fixture ----------------
 log("[synthetic] replace mode");
@@ -297,7 +251,6 @@ await page.close();
 
 // ---------------- extension pages (popup / options) ----------------
 log("[ui] extension pages");
-const extId = new URL(sw.url()).host;
 const shotDir = process.env.E2E_SHOTS || tmpdir();
 const watchErrors = (p) => {
   const errors = [];
@@ -366,8 +319,7 @@ log("[settings] migration");
   await p.close();
 }
 
-await ctx.close();
+await h.close();
 server.close();
-rmSync(userDataDir, { recursive: true, force: true });
 console.log(failures ? `\n${failures} FAILED` : "\nALL PASSED");
 process.exit(failures ? 1 : 0);

@@ -1,29 +1,23 @@
-import { MODELS, EFFORTS, LANG_PRESETS, modelInfo, fmtUsd, fmtJpy } from "../shared/models.js";
+import { MODELS, EFFORTS, LANG_PRESETS, DEFAULTS, modelInfo, fmtUsd, fmtJpy } from "../shared/models.js";
+import { $, bg, fillSelect, segmented } from "../shared/ui.js";
 
-const $ = (id) => document.getElementById(id);
-const bg = (msg) => chrome.runtime.sendMessage(msg);
+const LIMITS = { batchChars: [500, 8000], concurrency: [1, 8] };
 let settings = null;
+const modeSeg = segmented($("modeSeg"), (mode) => modeSeg.set(mode));
 
-function fill(sel, items, value, labelOf) {
-  sel.innerHTML = "";
-  for (const it of items) {
-    const o = document.createElement("option");
-    o.value = it.id;
-    o.textContent = labelOf(it);
-    o.selected = it.id === value;
-    sel.appendChild(o);
-  }
+const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
+
+// 1万字の英文 ≈ 入力 3,000 tok + システム/マーカー 2,000 tok、出力 ≈ 7,000 tok の概算
+function estimatePageUsd(m) {
+  return (5000 * m.input + 7000 * m.output) / 1_000_000;
 }
 
 function showModelPrice() {
   const m = modelInfo($("model").value);
-  $("modelPrice").textContent = m
-    ? `入力 $${m.input}/MTok · 出力 $${m.output}/MTok（目安: 英文1万字のページ ≈ ${fmtUsd(estimatePage(m))} ≈ ${fmtJpy(estimatePage(m), Number($("usdJpy").value) || 150)}）`
-    : "";
-}
-// 1万字の英文 ≈ 入力 3,000 tok + システム/マーカー 2,000 tok、出力 ≈ 7,000 tok の概算
-function estimatePage(m) {
-  return (5000 * m.input + 7000 * m.output) / 1_000_000;
+  if (!m) { $("modelPrice").textContent = ""; return; }
+  const usd = estimatePageUsd(m);
+  const rate = Number($("usdJpy").value) || DEFAULTS.usdJpy;
+  $("modelPrice").textContent = `入力 $${m.input}/MTok · 出力 $${m.output}/MTok（目安: 英文1万字のページ ≈ ${fmtUsd(usd)} ≈ ${fmtJpy(usd, rate)}）`;
 }
 
 function renderUsage() {
@@ -42,11 +36,9 @@ function renderUsage() {
   }
 }
 
-function setMode(mode) {
-  for (const b of document.querySelectorAll(".segbtn")) b.classList.toggle("on", b.dataset.mode === mode);
-}
-function getMode() {
-  return document.querySelector(".segbtn.on")?.dataset.mode || "replace";
+async function refreshCache() {
+  const r = await bg({ type: "cacheStats" });
+  $("cacheStats").textContent = `cache: ${r && r.ok ? r.count.toLocaleString() : "?"} entries`;
 }
 
 async function load() {
@@ -56,11 +48,11 @@ async function load() {
   $("ver").textContent = `v${chrome.runtime.getManifest().version}`;
   $("apiKey").value = settings.apiKey || "";
   $("apiBase").value = settings.apiBase || "";
-  fill($("model"), MODELS, settings.model, (m) => `${m.label} — ${m.note}`);
-  fill($("effort"), EFFORTS, settings.effort, (e) => e.label);
+  fillSelect($("model"), MODELS, settings.model, (m) => `${m.label} — ${m.note}`);
+  fillSelect($("effort"), EFFORTS, settings.effort, (e) => e.label);
   $("targetLang").value = settings.targetLang;
   for (const l of LANG_PRESETS) { const o = document.createElement("option"); o.value = l; $("langs").appendChild(o); }
-  setMode(settings.displayMode);
+  modeSeg.set(settings.displayMode);
   $("customInstructions").value = settings.customInstructions || "";
   $("glossary").value = settings.glossary || "";
   $("skipNav").checked = !!settings.skipNav;
@@ -74,30 +66,25 @@ async function load() {
   refreshCache();
 }
 
-async function refreshCache() {
-  const r = await bg({ type: "cacheStats" });
-  $("cacheStats").textContent = `cache: ${r && r.ok ? r.count.toLocaleString() : "?"} entries`;
-}
-
+// 画面の入力 → 保存する設定
 function collect() {
   return {
     apiKey: $("apiKey").value.trim(),
-    apiBase: $("apiBase").value.trim() || "https://api.anthropic.com",
+    apiBase: $("apiBase").value.trim() || DEFAULTS.apiBase,
     model: $("model").value,
     effort: $("effort").value,
-    targetLang: $("targetLang").value.trim() || "日本語",
-    displayMode: getMode(),
+    targetLang: $("targetLang").value.trim() || DEFAULTS.targetLang,
+    displayMode: modeSeg.get(),
     customInstructions: $("customInstructions").value,
     glossary: $("glossary").value,
     skipNav: $("skipNav").checked,
-    batchChars: clamp(Number($("batchChars").value) || 2500, 500, 8000),
-    concurrency: clamp(Number($("concurrency").value) || 4, 1, 8),
-    usdJpy: Number($("usdJpy").value) || 150,
+    batchChars: clamp(Number($("batchChars").value) || DEFAULTS.batchChars, LIMITS.batchChars),
+    concurrency: clamp(Number($("concurrency").value) || DEFAULTS.concurrency, LIMITS.concurrency),
+    usdJpy: Number($("usdJpy").value) || DEFAULTS.usdJpy,
     cacheEnabled: $("cacheEnabled").checked,
     autoHosts: $("autoHosts").value.split(/\r?\n/).map((s) => s.trim().toLowerCase()).filter(Boolean),
   };
 }
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 async function save() {
   const partial = collect();
@@ -108,13 +95,7 @@ async function save() {
   setTimeout(() => { $("saved").hidden = true; }, 1600);
 }
 
-$("save").addEventListener("click", save);
-$("toggleKey").addEventListener("click", () => {
-  const i = $("apiKey");
-  i.type = i.type === "password" ? "text" : "password";
-  $("toggleKey").textContent = i.type === "password" ? "表示" : "隠す";
-});
-$("testKey").addEventListener("click", async () => {
+async function testKey() {
   const out = $("testResult");
   out.className = "help testing";
   out.textContent = "接続中…";
@@ -126,10 +107,17 @@ $("testKey").addEventListener("click", async () => {
     out.className = "help err";
     out.textContent = `失敗: ${(r && r.error) || "不明なエラー"}`;
   }
+}
+
+$("save").addEventListener("click", save);
+$("testKey").addEventListener("click", testKey);
+$("toggleKey").addEventListener("click", () => {
+  const i = $("apiKey");
+  i.type = i.type === "password" ? "text" : "password";
+  $("toggleKey").textContent = i.type === "password" ? "表示" : "隠す";
 });
 $("model").addEventListener("change", showModelPrice);
 $("usdJpy").addEventListener("input", showModelPrice);
-for (const b of document.querySelectorAll(".segbtn")) b.addEventListener("click", () => setMode(b.dataset.mode));
 $("clearCache").addEventListener("click", async () => {
   if (!confirm("翻訳キャッシュをすべて削除します。よろしいですか？")) return;
   await bg({ type: "clearCache" });

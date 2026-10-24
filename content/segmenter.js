@@ -98,6 +98,8 @@
   }
 
   // run（連続する text / inline / opaque ノード）→ {text, refs, kinds}
+  // inline 要素は <iN>…</iN> で中身ごと、それ以外（code/img 等や翻訳不要のもの）は <iN/> の不透明な参照にする
+  const NO_NAV = { skipNav: false };
   function serialize(nodes) {
     const refs = [];
     const kinds = [];
@@ -105,9 +107,7 @@
     const ser = (n) => {
       if (n.nodeType === 3) { out += esc(n.data); return; }
       if (n.nodeType !== 1) return;
-      const t = tagOf(n);
-      const inline =
-        !isForeign(n) && !OPAQUE.has(t) && INLINE.has(t) && !noTranslate(n) && !isOurs(n) && hasWord(n) && !hasBlockDescendant(n, 0);
+      const inline = classify(n, NO_NAV) === "inline";
       const i = refs.push(n) - 1;
       kinds.push(inline ? "inline" : "opaque");
       if (inline) {

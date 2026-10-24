@@ -38,25 +38,6 @@ function wrap(req) {
   });
 }
 
-export async function cacheGet(key) {
-  try {
-    const store = await tx("readonly");
-    const row = await wrap(store.get(key));
-    return row ? row.t : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function cacheSet(key, value) {
-  try {
-    const store = await tx("readwrite");
-    await wrap(store.put({ k: key, t: value, ts: Date.now() }));
-  } catch {
-    /* キャッシュ失敗は致命ではない */
-  }
-}
-
 // 複数キーを 1 トランザクションで読む → Map<key, value>
 export async function cacheGetMany(keys) {
   const out = new Map();
