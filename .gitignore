@@ -8,3 +8,4 @@ Thumbs.db
 # 開発中の一時ファイル
 tmp/
 scratch/
+docs/shots/*.png

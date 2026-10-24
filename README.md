@@ -7,6 +7,10 @@ DeepL / Google 翻訳のようにページ全体を置き換えるか、原文�
 
 Google 翻訳が「弦（String）」「間違い（false）」「真実（true）」のように壊すところを、技術文書として読める日本語にするのが目的。
 
+![原文と、TransForge で置き換え翻訳した Apache Camel のドキュメント](docs/shots/compare.webp)
+
+<sub>Apache Camel の AS2 コンポーネント文書を Claude Sonnet 5.5 で翻訳（515 セグメント・約 40 秒・$0.24）。右下のバッジに費用とキャッシュ件数が出る。</sub>
+
 ## セットアップ
 
 1. Chrome で `chrome://extensions` を開き、右上の **デベロッパーモード** を ON
@@ -21,12 +25,31 @@ API キーはこの PC の `chrome.storage.local` にだけ保存され、リク
 | 操作 | 方法 |
 |---|---|
 | ページ全体を翻訳 / 原文に戻す | ツールバーの羽根アイコン →「翻訳する」、または **Alt+T**（`chrome://extensions/shortcuts` で変更可） |
-| 表示モード | ポップアップの **置換**（原文を訳文に差し替え）/ **対訳**（原文の下に緑の罫線付きで訳文） |
-| 選択範囲だけ訳す | テキストを選択 → 横に出る **訳** ボタン、または右クリック →「選択範囲を Claude で翻訳」 |
+| 表示モード | ポップアップの **置き換え**（原文を訳文に差し替え）/ **対訳**（原文の下に罫線付きで訳文） |
+| 選択範囲だけ訳す | テキストを選択 → 横に出る **翻訳** ボタン、または右クリック →「選択範囲を Claude で翻訳」 |
 | 常に翻訳するサイト | ポップアップの「このサイトは常に翻訳」 |
 | 途中で止める | 右下のバッジの **中止** |
 
 翻訳は**画面に見えている部分から**始まり、残りは上から順に流れる。SPA で後から追加された文や、開いた `<details>` の中身も自動で追い翻訳する。
+
+### 画面
+
+**対訳モード** — 原文を残し、段落の下に訳文を差し込む。訳文には左に罫線が付く。
+
+![対訳モード](docs/shots/bilingual.webp)
+
+**選択範囲の翻訳** — 文を選ぶと横に「翻訳」ボタンが出る。押すとその場にパネルで訳文（費用つき）。
+
+![選択範囲の翻訳](docs/shots/selection.webp)
+
+**ポップアップと設定** — ポップアップで表示モード・言語・モデルを切り替え、このページと累計の費用を確認。設定ページで API キー、追加指示、用語集、キャッシュ、常に翻訳するサイトなどを管理。
+
+<table>
+<tr>
+<td width="30%" valign="top"><img src="docs/shots/popup.webp" alt="ポップアップ"></td>
+<td width="70%" valign="top"><img src="docs/shots/options.webp" alt="設定ページ"></td>
+</tr>
+</table>
 
 ## 語順の扱い（重要）
 
@@ -71,15 +94,16 @@ TransForge は **段落（run）全体を 1 セグメント**として渡し、�
 ```
 manifest.json          MV3
 background.js          service worker: API 呼び出し・再試行・キャッシュ・使用量・注入
-content/segmenter.js   DOM → セグメント化（マーカー直列化 / 復元 / in-place 適用）
-content/content.js     翻訳の進行・適用・復元、MutationObserver、選択翻訳、shadow DOM UI
-content/content.css    対訳モードの訳文スタイル
-popup/, options/       ポップアップと設定ページ（shared/theme.css の Claude 風暖色テーマ）
+content/segmenter.js   DOM → セグメント化（マーカー直列化 / 復元 / in-place 適用）。純粋な DOM ロジック
+content/ui.js          ページ内 UI（進行バッジ・選択翻訳ボタン・翻訳パネル）の shadow DOM。表示だけを担当
+content/content.js     翻訳の進行・適用・復元、MutationObserver による追い翻訳、選択翻訳、メッセージ処理
+content/content.css    対訳モードの訳文スタイルと UI 用フォントの @font-face
+popup/, options/       ポップアップと設定ページ（shared/theme.css の Claude 風暖色テーマ、shared/ui.js の共通ヘルパー）
 fonts/                 UI 用の丸ゴシック M PLUS Rounded 1c（OFL、woff2 サブセット・ページ本文には使わない）
-shared/                models.js(モデル表・価格) api.js(リクエスト) prompt.js(プロンプト) cache.js settings.js
-tools/make_icons.py    アイコン生成 / tools/check.mjs 構文チェック
-docs/hero.webp         README 用のヒーロー画像
-tests/                 e2e.mjs(Playwright + モック API) real_api_check.mjs(実 API の小テスト) diag_as2.mjs
+shared/                models.js(モデル表・価格・既定値) api.js(リクエスト) prompt.js(プロンプト) cache.js settings.js ui.js
+tools/                 make_icons.py(アイコン) check.mjs(構文チェック) capture_readme.mjs + make_readme_assets.py(README 画像)
+docs/                  hero.webp と shots/*.webp（README 用画像）
+tests/                 harness.mjs(拡張入り Chromium の起動) e2e.mjs(モック API の E2E) real_api_check.mjs diag_as2.mjs
 ```
 
 ## テスト
@@ -90,6 +114,8 @@ npm i && npx playwright install chromium   # E2E の準備（playwright-core + C
 npm test                             # モック API に対する E2E（翻訳 / 復元 / 対訳 / 選択翻訳 / 設定移行、70 項目）
 ANTHROPIC_API_KEY=... npm run real [-- model]   # 実 API で Camel AS2 の実セグメントを翻訳（課金あり・数セント）
 ```
+
+README の画像は実ページを実 API で翻訳して撮っている（`ANTHROPIC_API_KEY=... node tools/capture_readme.mjs` → `python tools/make_readme_assets.py`、Camel のページ 1 回で $0.24 ほど）。
 
 `tests/fixture/as2.html` は検証用に保存した [Apache Camel の AS2 コンポーネント文書](https://camel.apache.org/components/4.22.x/as2-component.html)（Apache License 2.0）のスナップショットです。
 
