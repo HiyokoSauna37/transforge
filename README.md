@@ -1,5 +1,7 @@
 # TransForge
 
+<p align="center"><img src="docs/hero.webp" alt="TransForge — Webを、読みやすい日本語に。Claude で、ページをその場で翻訳。" width="100%"></p>
+
 Claude API でページを**自然な日本語**に翻訳する、自分用の Chrome 拡張（Manifest V3・ビルド不要）。
 DeepL / Google 翻訳のようにページ全体を置き換えるか、原文の下に訳文を並べる（対訳）か、選択範囲だけ訳すかを選べる。
 
@@ -76,6 +78,7 @@ popup/, options/       ポップアップと設定ページ（shared/theme.css �
 fonts/                 UI 用の丸ゴシック M PLUS Rounded 1c（OFL、woff2 サブセット・ページ本文には使わない）
 shared/                models.js(モデル表・価格) api.js(リクエスト) prompt.js(プロンプト) cache.js settings.js
 tools/make_icons.py    アイコン生成 / tools/check.mjs 構文チェック
+docs/hero.webp         README 用のヒーロー画像
 tests/                 e2e.mjs(Playwright + モック API) real_api_check.mjs(実 API の小テスト) diag_as2.mjs
 ```
 
