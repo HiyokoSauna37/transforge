@@ -8,6 +8,7 @@ import { EXPLAIN_VERSION, normalizeExplanation, buildExplanationSystem, buildExp
 
 const CONTENT_JS = ["content/segmenter.js", "content/context.js", "content/ui.js", "content/content.js"];
 const CONTENT_CSS = ["content/content.css"];
+const MENU_PAGE = "tf-page";
 const MENU_SELECTION = "tf-selection";
 const MENU_EXPLAIN = "tf-explain-selection";
 const MAX_RETRY_AFTER_MS = 30000;
@@ -17,6 +18,7 @@ const inflight = new Map(); // sessionId -> Set<AbortController>
 // ---------- ブラウザ側のイベント ----------
 chrome.runtime.onInstalled.addListener(async () => {
   await chrome.contextMenus.removeAll();
+  chrome.contextMenus.create({ id: MENU_PAGE, title: "このページを Yomeru で翻訳", contexts: ["all"] });
   chrome.contextMenus.create({ id: MENU_SELECTION, title: "選択範囲を Claude で翻訳", contexts: ["selection"] });
   const s = await getSettings();
   chrome.contextMenus.create({ id: MENU_EXPLAIN, title: "選択範囲を Yomeru で解説", contexts: ["selection"], visible: s.explanationEnabled !== false });
@@ -24,8 +26,13 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (![MENU_SELECTION, MENU_EXPLAIN].includes(info.menuItemId) || !tab || !tab.id) return;
-  if (await ensureContent(tab.id)) sendToTab(tab.id, { type: info.menuItemId === MENU_EXPLAIN ? "tf:explainSelection" : "tf:translateSelection" });
+  const type = {
+    [MENU_PAGE]: "tf:translate",
+    [MENU_SELECTION]: "tf:translateSelection",
+    [MENU_EXPLAIN]: "tf:explainSelection",
+  }[info.menuItemId];
+  if (!type || !tab?.id) return;
+  if (await ensureContent(tab.id)) sendToTab(tab.id, { type });
 });
 
 chrome.commands.onCommand.addListener(async (cmd) => {
