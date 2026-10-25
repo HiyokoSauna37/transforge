@@ -1,4 +1,4 @@
-// TransForge segmenter: 文書を翻訳単位（run）に分割し、<iN> マーカー付き文字列へ直列化 / 復元する DOM ロジック。
+// Yomeru segmenter: 文書を翻訳単位（run）に分割し、<iN> マーカー付き文字列へ直列化 / 復元する DOM ロジック。
 // content.js と同じ isolated world で globalThis.TFSeg として共有。テストからも読み込める純粋 DOM 実装。
 (() => {
   if (globalThis.TFSeg) return;

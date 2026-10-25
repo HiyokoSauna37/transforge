@@ -1,10 +1,10 @@
-// TransForge UI: ページ内に出す進行バッジ / 選択翻訳ボタン / 翻訳パネル（shadow DOM）。
+// Yomeru UI: ページ内に出す進行バッジ / 選択翻訳ボタン / 翻訳パネル（shadow DOM）。
 // 表示だけを担当し、翻訳ロジックは持たない。content.js と同じ isolated world で globalThis.TFUi として共有。
 (() => {
   if (globalThis.TFUi) return;
 
   // BEGIN GENERATED MARK
-  const MARK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="16 16 96 96" aria-hidden="true"><rect x="23" y="23" width="49" height="64" rx="9" fill="none" stroke="#FAF9F5" stroke-width="6"/><polyline points="35,41 55,41" fill="none" stroke="#FAF9F5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="35,53 45,53" fill="none" stroke="#FAF9F5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><rect x="54" y="39" width="52" height="66" rx="10" fill="#FAF9F5" stroke="#C76B4D" stroke-width="6"/><polyline points="67,61 92,61" fill="none" stroke="#C76B4D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="85,54 92,61 85,68" fill="none" stroke="#C76B4D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="68,82 91,82" fill="none" stroke="#C76B4D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="68,92 82,92" fill="none" stroke="#C76B4D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const MARK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 14 108 108" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M18 24 C36 19 53 30 63 47 C75 30 91 20 111 23 C106 48 92 67 72 77 C64 101 49 115 26 109 L29 96 C42 100 53 90 58 77 C37 70 24 50 18 24 Z M31 36 C44 40 56 54 62 67 C48 59 38 47 31 36 Z M98 35 C85 39 73 54 68 67 C81 58 92 46 98 35 Z"/></svg>';
   // END GENERATED MARK
 
   const CSS = `
@@ -14,15 +14,15 @@
   --bg:#FFFFFF;--bg2:#F2F0E9;--line:#E7E4DB;--line2:#D8D4C8;--accent:#C76B4D;--accent2:#AF573C;--accent-soft:#F7E9E1;
   --ink:#1F1E1D;--ink2:#5E5C57;--muted:#8E8B82;--ok:#5B8A5F;--err:#C0493D;--err-soft:#F9E6E3;
   --shadow:0 1px 2px rgba(31,30,29,.06),0 10px 30px rgba(31,30,29,.12);
-  font-family:"TransForge Rounded","M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+  font-family:"Yomeru Rounded","M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
   color:var(--ink);line-height:1.6;letter-spacing:.01em;-webkit-font-smoothing:antialiased
 }
 @media (prefers-color-scheme: dark){
   .badge,.panel,.selbtn{--bg:#30302E;--bg2:#3A3936;--line:#3E3D39;--line2:#4C4A45;--ink:#ECEAE3;--ink2:#B8B5AC;--muted:#8C8982;
     --accent-soft:#473730;--err-soft:#45302D;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35)}
 }
-.mark{width:18px;height:18px;border-radius:6px;background:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
-.mark svg{width:18px;height:18px;display:block}
+.mark{width:18px;height:18px;color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.mark svg{width:23px;height:23px;display:block}
 button{font:inherit;cursor:pointer}
 
 /* 進行バッジ（右下） */
@@ -81,7 +81,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 <div class="badge" hidden><span class="mark">${MARK}</span><span class="spin"></span><span class="txt"></span><button class="stop">中止</button><div class="bar"><i></i></div></div>
 <button class="selbtn" hidden>${MARK}翻訳</button>
 <div class="panel" hidden>
-  <div class="ph"><span class="t"><span class="mark">${MARK}</span>Claude 翻訳</span><span class="cost"></span><button class="x" title="閉じる" aria-label="閉じる">×</button></div>
+  <div class="ph"><span class="t"><span class="mark">${MARK}</span>Yomeru 翻訳</span><span class="cost"></span><button class="x" title="閉じる" aria-label="閉じる">×</button></div>
   <div class="pb"></div>
   <div class="po" hidden></div>
   <div class="pf"><button class="copy">コピー</button><button class="orig">原文を表示</button></div>

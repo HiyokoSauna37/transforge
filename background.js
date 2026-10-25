@@ -1,4 +1,4 @@
-// TransForge service worker: Claude API 呼び出し・再試行・キャッシュ・使用量・コンテンツスクリプト注入
+// Yomeru service worker: Claude API 呼び出し・再試行・キャッシュ・使用量・コンテンツスクリプト注入
 import { estimateCostUsd } from "./shared/models.js";
 import { buildRequest, extractText, usageOf, describeHttpError, checkStop } from "./shared/api.js";
 import { buildSystemPrompt, buildUserMessage, parseSegments } from "./shared/prompt.js";

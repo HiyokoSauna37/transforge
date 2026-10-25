@@ -1,4 +1,5 @@
 // 翻訳キャッシュ（IndexedDB・service worker 用）
+// 旧ブランドの DB 名を維持し、更新前の翻訳キャッシュを引き継ぐ。
 const DB_NAME = "transforge";
 const STORE = "cache";
 const MAX_ENTRIES = 20000;

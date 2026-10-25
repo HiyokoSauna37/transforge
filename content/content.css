@@ -1,20 +1,20 @@
-/* TransForge: ページ内 UI 用の丸ゴシック（Shadow DOM からも参照できるよう document 側で宣言） */
+/* Yomeru: ページ内 UI 用の丸ゴシック（Shadow DOM からも参照できるよう document 側で宣言） */
 @font-face {
-  font-family: "TransForge Rounded";
+  font-family: "Yomeru Rounded";
   font-weight: 400;
   font-style: normal;
   font-display: swap;
   src: url(chrome-extension://__MSG_@@extension_id__/fonts/MPLUSRounded1c-Regular.woff2) format("woff2");
 }
 @font-face {
-  font-family: "TransForge Rounded";
+  font-family: "Yomeru Rounded";
   font-weight: 700;
   font-style: normal;
   font-display: swap;
   src: url(chrome-extension://__MSG_@@extension_id__/fonts/MPLUSRounded1c-Bold.woff2) format("woff2");
 }
 
-/* TransForge: 対訳モードで原文の下に挿入する訳文 */
+/* Yomeru: 対訳モードで原文の下に挿入する訳文 */
 .tf-trans-block {
   display: block;
   margin: 0.35em 0 0.15em;

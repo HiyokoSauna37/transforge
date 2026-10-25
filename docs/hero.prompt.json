@@ -1,0 +1,8 @@
+{
+  "tool": "Built-in image_gen.imagegen",
+  "asset": "docs/hero.webp",
+  "prompt": "Edit Image 1, the Yomеру README banner, using Image 2 as the exact new brand logo insert. The brand is spelled 'yomeru' in lowercase Latin letters. Replace the large square icon at the upper left with the distinctive free-standing terracotta lowercase-y/open-book/bookmark silhouette from Image 2. Render that mark exactly, including its two transparent curved fold cutouts and flowing descender. ABSOLUTELY NO SQUARE TILE, no rounded-square background, no rectangular container behind the logo. The logo sits freely on the cream paper background. Replace the wordmark 'Yomeru' with 'yomeru' in refined lowercase serif typography, with breathing room. Keep ALL other banner elements: exact Japanese main headline '気になるページを、いつもの言葉で。', subtitle 'Claude で、Web を読みやすく。', overlapping reading browser cards, small feature labels, soft warm ivory paper, muted terracotta/charcoal palette, landscape composition. Do not add an explanation feature (not yet implemented). No old page logo, no feathers, no other logos. Preserve the tasteful editorial style and clean text.",
+  "referenceLogo": "icons/icon128.png",
+  "referenceLayout": "Earlier Yomeru banner concept with cream paper and overlapping reading cards",
+  "outputEncoding": "WebP, quality 92"
+}

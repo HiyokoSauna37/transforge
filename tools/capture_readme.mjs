@@ -38,7 +38,7 @@ await shot(page, "replace");
 // ポップアップ（翻訳済みの状態・このページのコスト入り）
 {
   const p = await h.ctx.newPage();
-  await p.setViewportSize({ width: 360, height: 560 });
+  await p.setViewportSize({ width: 360, height: 600 });
   await p.goto(`chrome-extension://${h.extId}/popup/popup.html?tab=${tabId}`);
   await p.waitForFunction(() => document.getElementById("statusText").textContent.startsWith("翻訳済み"), null, { timeout: 10000 }).catch(() => {});
   await p.waitForTimeout(300);

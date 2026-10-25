@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "TransForge",
+  "name": "Yomeru",
   "version": "0.1.0",
   "description": "Claude API でページを自然な日本語に翻訳する個人用拡張（置換 / 対訳 / 選択範囲）",
   "icons": {
@@ -17,7 +17,7 @@
   },
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "TransForge — Claude で翻訳 (Alt+T)",
+    "default_title": "Yomeru — Claude で翻訳 (Alt+T)",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"

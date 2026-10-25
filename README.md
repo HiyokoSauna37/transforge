@@ -1,22 +1,28 @@
-# TransForge
+# Yomeru（よめる）
 
-<p align="center"><img src="docs/hero.webp" alt="TransForge — Webを、読みやすい日本語に。Claude で、ページをその場で翻訳。" width="100%"></p>
+<p align="center"><img src="docs/hero.webp" alt="Yomeru — Webを、読みやすい日本語に。Claude で、ページをその場で翻訳。" width="100%"></p>
 
-Claude API でページを**自然な日本語**に翻訳する、自分用の Chrome 拡張（Manifest V3・ビルド不要）。
-DeepL / Google 翻訳のようにページ全体を置き換えるか、原文の下に訳文を並べる（対訳）か、選択範囲だけ訳すかを選べる。
+**気になるページを、いつもの言葉で。**
 
-Google 翻訳が「弦（String）」「間違い（false）」「真実（true）」のように壊すところを、技術文書として読める日本語にするのが目的。
+Claude API で Web ページを自然な日本語に翻訳する Chrome 拡張（Manifest V3・ビルド不要）。
+ページ全体を読みやすく置き換える、原文と訳文を並べる、気になった一文だけを訳す。読み方に合わせて選べます。
 
-![原文と、TransForge で置き換え翻訳した Apache Camel のドキュメント](docs/shots/compare.webp)
+名前は「読める」から。ロゴは、小文字の **y** に開いた本のページとしおりを重ねた、背景のないマークです。
 
-<sub>Apache Camel の AS2 コンポーネント文書を Claude Sonnet 5.5 で翻訳（515 セグメント・約 40 秒・$0.24）。右下のバッジに費用とキャッシュ件数が出る。</sub>
+![Yomeru によるサンプル文書の原文と翻訳の比較](docs/shots/compare.webp)
+
+<sub>サンプル文書と用意した訳文を使い、実際の拡張機能で撮影したデモ画面です。</sub>
 
 ## セットアップ
 
+```sh
+git clone https://github.com/HiyokoSauna37/yomeru.git
+```
+
 1. Chrome で `chrome://extensions` を開き、右上の **デベロッパーモード** を ON
-2. **パッケージ化されていない拡張機能を読み込む** → このフォルダ（`TransForge/`）を選ぶ
-3. ツールバーの羽根アイコン → **設定 ⚙**（または拡張の「詳細」→「拡張機能のオプション」）
-4. **Anthropic API キー**を貼って **接続テスト** → **保存**
+2. **パッケージ化されていない拡張機能を読み込む** → このフォルダ（`yomeru/`）を選ぶ
+3. ツールバーの Yomeru アイコン → **設定**（または拡張の「詳細」→「拡張機能のオプション」）
+4. **Anthropic API キー**を貼って **接続テスト** → **設定を保存**
 
 API キーはこの PC の `chrome.storage.local` にだけ保存され、リクエストは拡張のサービスワーカーから `api.anthropic.com` に直接送られる（中継サーバーなし）。
 
@@ -24,7 +30,7 @@ API キーはこの PC の `chrome.storage.local` にだけ保存され、リク
 
 | 操作 | 方法 |
 |---|---|
-| ページ全体を翻訳 / 原文に戻す | ツールバーの羽根アイコン →「翻訳する」、または **Alt+T**（`chrome://extensions/shortcuts` で変更可） |
+| ページ全体を翻訳 / 原文に戻す | ツールバーの Yomeru アイコン →「このページを翻訳」、または **Alt+T**（`chrome://extensions/shortcuts` で変更可） |
 | 表示モード | ポップアップの **置き換え**（原文を訳文に差し替え）/ **対訳**（原文の下に罫線付きで訳文） |
 | 選択範囲だけ訳す | テキストを選択 → 横に出る **翻訳** ボタン、または右クリック →「選択範囲を Claude で翻訳」 |
 | 常に翻訳するサイト | ポップアップの「このサイトは常に翻訳」 |
@@ -54,7 +60,7 @@ API キーはこの PC の `chrome.storage.local` にだけ保存され、リク
 ## 語順の扱い（重要）
 
 Google 翻訳は HTML のテキストノード単位で訳すため、`<a>` や `<strong>` で分かれた語句の順序が日本語で崩れる。
-TransForge は **段落（run）全体を 1 セグメント**として渡し、リンク・太字などは `<i0>…</i0>`、コード・画像などは `<i1/>` というマーカーに置き換える。Claude には「日本語の語順に合わせてマーカーごと並べ替えてよい」と指示し、返ってきた順序どおりに DOM を組み直す。
+Yomeru は **段落（run）全体を 1 セグメント**として渡し、リンク・太字などは `<i0>…</i0>`、コード・画像などは `<i1/>` というマーカーに置き換える。Claude には「日本語の語順に合わせてマーカーごと並べ替えてよい」と指示し、返ってきた順序どおりに DOM を組み直す。
 
 ```
 原文: See <i0>the documentation</i0> for <i1>details</i1>.
@@ -65,7 +71,8 @@ TransForge は **段落（run）全体を 1 セグメント**として渡し、�
 - 順序が変わった場合は要素を複製して並べ替える（`href` などの属性は維持）
 - マーカーが壊れて返ってきたときは 1 回だけ単体で再試行し、それでも駄目なら訳文テキストを置いて黄色の点線下線で印を付ける
 
-`<code>` / `<pre>` / `translate="no"` / `.notranslate` / 非表示要素 / `nav`・`aside`（設定で変更可）は訳さない。
+`<code>` / `<pre>` / 個別要素の `translate="no"` / `.notranslate` / 非表示要素 / `nav`・`aside`（設定で変更可）は訳さない。
+`html`・`body` のページ全体の翻訳禁止指定があっても、ユーザー操作で翻訳できる。
 型名（String, boolean…）・識別子・オプション名・true/false は原語のまま残すようプロンプトで指示している。
 
 ## モデルと費用
@@ -101,7 +108,8 @@ content/content.css    対訳モードの訳文スタイルと UI 用フォン�
 popup/, options/       ポップアップと設定ページ（shared/theme.css の Claude 風暖色テーマ、shared/ui.js の共通ヘルパー）
 fonts/                 UI 用の丸ゴシック M PLUS Rounded 1c（OFL、woff2 サブセット・ページ本文には使わない）
 shared/                models.js(モデル表・価格・既定値) api.js(リクエスト) prompt.js(プロンプト) cache.js settings.js ui.js
-tools/                 make_icons.py(アイコン) check.mjs(構文チェック) capture_readme.mjs + make_readme_assets.py(README 画像)
+icons/                 背景のない y マーク（SVG / PNG、16〜128px）
+tools/                 make_icons.py(アイコン) check.mjs(構文チェック) capture_demo.mjs + make_readme_assets.py(README 画像)
 docs/                  hero.webp と shots/*.webp（README 用画像）
 tests/                 harness.mjs(拡張入り Chromium の起動) e2e.mjs(モック API の E2E) real_api_check.mjs diag_as2.mjs
 ```
@@ -115,7 +123,15 @@ npm test                             # モック API に対する E2E（翻訳 /
 ANTHROPIC_API_KEY=... npm run real [-- model]   # 実 API で Camel AS2 の実セグメントを翻訳（課金あり・数セント）
 ```
 
-README の画像は実ページを実 API で翻訳して撮っている（`ANTHROPIC_API_KEY=... node tools/capture_readme.mjs` → `python tools/make_readme_assets.py`、Camel のページ 1 回で $0.24 ほど）。
+README の操作画面は、サンプル文書と用意した訳文を使って実際の拡張機能から撮影する。外部 API や API キーは不要。
+
+```sh
+node tools/capture_demo.mjs
+python tools/make_readme_assets.py
+```
+
+実ページ・実 API の撮影には `ANTHROPIC_API_KEY=... node tools/capture_readme.mjs` を使用できる（API 料金が発生）。
+メイン画像は組み込み imagegen で作成し、生成条件は [docs/hero.prompt.json](docs/hero.prompt.json) に記録している。
 
 `tests/fixture/as2.html` は検証用に保存した [Apache Camel の AS2 コンポーネント文書](https://camel.apache.org/components/4.22.x/as2-component.html)（Apache License 2.0）のスナップショットです。
 

@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-"""TransForge のロゴ: 原文と訳文を表す二枚のページと、変換の矢印。
+"""Yomeru のロゴ: 小文字 y・開いた本・しおりを重ねた、背景のないマーク。
 usage: python tools/make_icons.py （Pillow が必要）
-  → icons/icon{16,32,48,128}.png、icons/mark.svg、icons/icon.svg
-  → content/ui.js 内の同じマークも更新する。
-SVG と PNG は同じ座標から生成。8 倍スーパーサンプリングで小サイズを描画。
+SVG / PNG / content UI のマークを同じベジェ座標から生成する。
 """
 from pathlib import Path
 import re
@@ -11,70 +9,71 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "icons"
-BG = "#C76B4D"
-CREAM = "#FAF9F5"
-# (bounds, radius, fill, stroke, stroke width)。背面が原文、前面が訳文。
-PAGES = [
-    ((23, 23, 72, 87), 9, None, CREAM, 6),
-    ((54, 39, 106, 105), 10, CREAM, BG, 6),
+ACCENT = "#C76B4D"
+# ゆるやかに開く左右のページが y の両腕に、下へ流れるしおりがディセンダーになる。
+OUTLINE = [
+    ("M", 18, 24), ("C", 36, 19, 53, 30, 63, 47),
+    ("C", 75, 30, 91, 20, 111, 23), ("C", 106, 48, 92, 67, 72, 77),
+    ("C", 64, 101, 49, 115, 26, 109), ("L", 29, 96),
+    ("C", 42, 100, 53, 90, 58, 77), ("C", 37, 70, 24, 50, 18, 24), ("Z",),
 ]
-LINES = [
-    ([(35, 41), (55, 41)], CREAM, 5),
-    ([(35, 53), (45, 53)], CREAM, 5),
-    ([(67, 61), (92, 61)], BG, 5),
-    ([(85, 54), (92, 61), (85, 68)], BG, 5),
-    ([(68, 82), (91, 82)], BG, 5),
-    ([(68, 92), (82, 92)], BG, 5),
+FOLDS = [
+    [("M", 31, 36), ("C", 44, 40, 56, 54, 62, 67), ("C", 48, 59, 38, 47, 31, 36), ("Z",)],
+    [("M", 98, 35), ("C", 85, 39, 73, 54, 68, 67), ("C", 81, 58, 92, 46, 98, 35), ("Z",)],
 ]
+
+
+def path_data(commands):
+    return " ".join(command[0] + " ".join(str(n) for n in command[1:]) for command in commands)
 
 
 def mark_svg():
-    parts = []
-    # 原文の罫線を先に描き、訳文のページで自然に覆う。
-    for i, (bounds, radius, fill, stroke, width) in enumerate(PAGES):
-        x, y, right, bottom = bounds
-        parts.append(f'<rect x="{x}" y="{y}" width="{right-x}" height="{bottom-y}" rx="{radius}" fill="{fill or "none"}" stroke="{stroke}" stroke-width="{width}"/>')
-        for points, color, line_width in (LINES[:2] if i == 0 else LINES[2:]):
-            coords = " ".join(f'{x},{y}' for x, y in points)
-            parts.append(f'<polyline points="{coords}" fill="none" stroke="{color}" stroke-width="{line_width}" stroke-linecap="round" stroke-linejoin="round"/>')
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="16 16 96 96" aria-hidden="true">' + ''.join(parts) + '</svg>'
+    d = " ".join(path_data(commands) for commands in [OUTLINE, *FOLDS])
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 14 108 108" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="{d}"/></svg>'
+
+
+def polygon(commands):
+    points = []
+    current = (0, 0)
+    for command in commands:
+        op, *v = command
+        if op in ("M", "L"):
+            current = tuple(v)
+            points.append(current)
+        elif op == "C":
+            p0 = current
+            p1, p2, p3 = tuple(v[:2]), tuple(v[2:4]), tuple(v[4:])
+            for i in range(1, 65):
+                t = i / 64
+                u = 1 - t
+                points.append(tuple(u**3*p0[j] + 3*u*u*t*p1[j] + 3*u*t*t*p2[j] + t**3*p3[j] for j in (0, 1)))
+            current = p3
+    return points
 
 
 def render(size):
     scale = 8
-    canvas_size = 128 * scale
-    image = Image.new("RGBA", (canvas_size, canvas_size))
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((0, 0, canvas_size-1, canvas_size-1), radius=28*scale, fill=BG)
-    for i, (bounds, radius, fill, stroke, width) in enumerate(PAGES):
-        # Pillow は輪郭を内側に描くため、SVG の中心線基準へ合わせる。
-        half = width / 2
-        x, y, right, bottom = bounds
-        box = tuple(round(v*scale) for v in (x-half, y-half, right+half, bottom+half))
-        draw.rounded_rectangle(box, radius=round((radius+half)*scale), fill=fill, outline=stroke, width=width*scale)
-        for points, color, line_width in (LINES[:2] if i == 0 else LINES[2:]):
-            scaled = [(x*scale, y*scale) for x, y in points]
-            draw.line(scaled, fill=color, width=line_width*scale, joint="curve")
-            r = line_width*scale/2
-            for x, y in scaled:
-                draw.ellipse((x-r, y-r, x+r, y+r), fill=color)
-    return image.resize((size, size), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (128*scale, 128*scale))
+    draw = ImageDraw.Draw(canvas)
+    draw.polygon([(x*scale, y*scale) for x, y in polygon(OUTLINE)], fill=ACCENT)
+    for fold in FOLDS:
+        draw.polygon([(x*scale, y*scale) for x, y in polygon(fold)], fill=(0, 0, 0, 0))
+    return canvas.resize((size, size), Image.Resampling.LANCZOS)
 
 
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     mark = mark_svg()
     (OUT / "mark.svg").write_text(mark + "\n", encoding="utf-8")
-    icon = mark.replace('viewBox="16 16 96 96"', 'viewBox="0 0 128 128"').replace('aria-hidden="true">', f'aria-hidden="true"><rect width="128" height="128" rx="28" fill="{BG}"/>', 1)
+    icon = mark.replace('viewBox="10 14 108 108"', 'viewBox="0 0 128 128"').replace('fill="currentColor"', f'fill="{ACCENT}"')
     (OUT / "icon.svg").write_text(icon + "\n", encoding="utf-8")
     for size in (16, 32, 48, 128):
         render(size).save(OUT / f"icon{size}.png")
         print(f"wrote icon{size}.png")
     ui = ROOT / "content" / "ui.js"
     source = ui.read_text(encoding="utf-8")
-    pattern = r"  // BEGIN GENERATED MARK\n.*?  // END GENERATED MARK"
     replacement = "  // BEGIN GENERATED MARK\n  const MARK = '" + mark + "';\n  // END GENERATED MARK"
-    source, count = re.subn(pattern, lambda _: replacement, source, flags=re.S)
+    source, count = re.subn(r"  // BEGIN GENERATED MARK\n.*?  // END GENERATED MARK", lambda _: replacement, source, flags=re.S)
     if count != 1:
         raise RuntimeError("content/ui.js のマーク生成範囲が見つかりません")
     ui.write_text(source, encoding="utf-8")

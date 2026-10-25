@@ -1,7 +1,7 @@
-/* TransForge 共通テーマ — Claude 風の暖かいトーン（クリーム地 × テラコッタ）＋丸ゴシック */
-@font-face{font-family:"TransForge Rounded";font-weight:400;font-style:normal;font-display:swap;
+/* Yomeru 共通テーマ — Claude 風の暖かいトーン（クリーム地 × テラコッタ）＋丸ゴシック */
+@font-face{font-family:"Yomeru Rounded";font-weight:400;font-style:normal;font-display:swap;
   src:url(../fonts/MPLUSRounded1c-Regular.woff2) format("woff2")}
-@font-face{font-family:"TransForge Rounded";font-weight:700;font-style:normal;font-display:swap;
+@font-face{font-family:"Yomeru Rounded";font-weight:700;font-style:normal;font-display:swap;
   src:url(../fonts/MPLUSRounded1c-Bold.woff2) format("woff2")}
 :root{
   --bg:#FAF9F5;
@@ -24,8 +24,8 @@
   --radius:16px;
   --radius-s:10px;
   --shadow:0 1px 2px rgba(31,30,29,.04), 0 8px 24px rgba(31,30,29,.06);
-  --sans:"TransForge Rounded","M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
-  --display:"TransForge Rounded","M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+  --sans:"Yomeru Rounded","M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+  --display:"Yomeru Rounded","M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
   --mono:"SF Mono","Cascadia Mono","Consolas",monospace;
 }
 @media (prefers-color-scheme: dark){

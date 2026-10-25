@@ -1,4 +1,4 @@
-// TransForge content script: ページ翻訳の進行・適用・復元、追加翻訳（MutationObserver）、選択範囲翻訳。
+// Yomeru content script: ページ翻訳の進行・適用・復元、追加翻訳（MutationObserver）、選択範囲翻訳。
 // DOM の分割/復元は segmenter.js（TFSeg）、画面表示は ui.js（TFUi）に分けてある。
 (() => {
   if (globalThis.__tfLoaded) return;

@@ -57,7 +57,7 @@ def compare(before, after, out):
     canvas = Image.new("RGB", (M * 2 + W * 2 + GAP + 4, M * 2 + LABEL + a.height), CREAM)
     d = ImageDraw.Draw(canvas)
     f = font(26)
-    for x, label, im in ((M, "原文", a), (M + W + GAP + 2, "TransForge で翻訳（置き換え）", b)):
+    for x, label, im in ((M, "原文", a), (M + W + GAP + 2, "Yomeru で翻訳（置き換え）", b)):
         d.rounded_rectangle((x, M, x + 10, M + 34), radius=5, fill=ACCENT)
         d.text((x + 22, M + 2), label, font=f, fill=INK)
         canvas.paste(im, (x, M + LABEL), im)

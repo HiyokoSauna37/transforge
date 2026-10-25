@@ -31,6 +31,14 @@ export async function launch({ headless = true, prefix = "tf-", viewport = null 
   });
   let [sw] = ctx.serviceWorkers();
   if (!sw) sw = await ctx.waitForEvent("serviceworker", { timeout: 30000 });
+  // serviceworker イベント直後は拡張 API の初期化がまだ終わっていない場合がある。
+  await sw.evaluate(async () => {
+    for (let i = 0; i < 100; i++) {
+      if (globalThis.chrome?.storage?.local) return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error("extension storage API not ready");
+  });
   const extId = new URL(sw.url()).host;
 
   // chrome.storage.local の settings を丸ごと置き換える
