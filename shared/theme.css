@@ -135,3 +135,18 @@ textarea{resize:vertical;min-height:76px;line-height:1.6}
 .warn{color:var(--warn);font-size:.88rem;margin-bottom:8px}
 .help{color:var(--muted);font-size:.78rem;margin-top:5px;line-height:1.6}
 .help code{font-family:var(--mono);color:var(--ink-2);background:var(--bg-2);padding:0 4px;border-radius:4px}
+
+/* 読書道具らしい、穏やかなコントラストと端正なディテール。 */
+:root{--accent:#C76B4D;--accent-2:#AF573C;--muted:#79766E;--shadow:0 2px 3px rgba(31,30,29,.02),0 8px 24px rgba(31,30,29,.035)}
+@media(prefers-color-scheme:dark){:root{--accent:#D97757;--accent-2:#E38A6C;--muted:#A4A096;--shadow:0 2px 3px rgba(0,0,0,.12),0 8px 24px rgba(0,0,0,.16)}}
+.mast h1{font-family:Georgia,"Times New Roman",serif;font-weight:400;letter-spacing:-.045em}
+.eyebrow{font-family:var(--sans);font-size:.65rem;font-weight:700;letter-spacing:.16em;color:var(--accent)}
+.btn{font-weight:700}
+.btn:not(.ghost):not(.danger){background:#B85E43}
+.btn:not(.ghost):not(.danger):hover{background:#A45138}
+.segbtn.on{box-shadow:inset 0 0 0 1px var(--line),0 1px 3px rgba(31,30,29,.08)}
+@media(prefers-color-scheme:dark){.segbtn.on{background:#45413B}}
+button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+button:disabled{cursor:not-allowed}
+[hidden]{display:none!important}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

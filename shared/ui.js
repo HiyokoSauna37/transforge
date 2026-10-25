@@ -25,7 +25,13 @@ export function fillSelect(sel, items, value, labelOf = (it) => (typeof it === "
 // data-mode 付きボタン群のセグメントコントロール
 export function segmented(root, onChange) {
   const buttons = [...root.querySelectorAll(".segbtn")];
-  const set = (mode) => { for (const b of buttons) b.classList.toggle("on", b.dataset.mode === mode); };
+  const set = (mode) => {
+    for (const b of buttons) {
+      const selected = b.dataset.mode === mode;
+      b.classList.toggle("on", selected);
+      b.setAttribute("aria-pressed", String(selected));
+    }
+  };
   const get = () => (buttons.find((b) => b.classList.contains("on")) || buttons[0]).dataset.mode;
   for (const b of buttons) b.addEventListener("click", () => onChange(b.dataset.mode));
   return { get, set };

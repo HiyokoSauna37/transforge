@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TransForge 設定</title>
 <link rel="stylesheet" href="../shared/theme.css">
 <link rel="stylesheet" href="options.css">
@@ -11,15 +12,19 @@
   <header class="mast">
     <img class="mark" src="../icons/icon48.png" alt="">
     <div>
-      <h1>TransForge 設定</h1>
-      <div class="sub">Claude API でページを自然な日本語に翻訳する、自分用の拡張</div>
+      <h1>TransForge</h1>
+      <div class="sub">読む時間を、もっと心地よく。</div>
     </div>
     <span class="spacer"></span>
     <span class="dim" id="ver"></span>
   </header>
 
-  <section class="card">
-    <h2>接続</h2>
+  <div class="settings-intro"><span class="eyebrow">MAKE IT YOURS</span><h2>あなたの読み方に、合わせる。</h2><p>言葉も、文体も、表示も。いつもの読み心地をここから。</p></div>
+  <div class="settings-layout">
+  <nav class="settings-nav" aria-label="設定の項目"><span class="eyebrow">PREFERENCES</span><a href="#connection">接続<span>01</span></a><a href="#translation">翻訳<span>02</span></a><a href="#advanced">詳細<span>03</span></a><a href="#usage-section">使用量<span>04</span></a><p>Powered by Claude</p></nav>
+  <main class="settings-content">
+  <section class="card" id="connection">
+    <div class="section-heading"><span class="section-number">01</span><div><h2>接続</h2><p>Claude とつなぐ、最初の準備。</p></div></div>
     <div class="field">
       <label for="apiKey">Anthropic API キー</label>
       <div class="inline">
@@ -36,8 +41,8 @@
     </div>
   </section>
 
-  <section class="card">
-    <h2>翻訳</h2>
+  <section class="card" id="translation">
+    <div class="section-heading"><span class="section-number">02</span><div><h2>翻訳</h2><p>言葉の選び方と、読みやすさを整える。</p></div></div>
     <div class="grid2">
       <div class="field">
         <label for="model">モデル</label>
@@ -73,8 +78,8 @@
     <label class="check"><input type="checkbox" id="skipNav"><span class="box"></span>ナビゲーションやサイドバー（nav, aside）は翻訳しない（速く・安くなる）</label>
   </section>
 
-  <section class="card">
-    <h2>詳細</h2>
+  <section class="card" id="advanced">
+    <div class="section-heading"><span class="section-number">03</span><div><h2>詳細</h2><p>速度やキャッシュを、自分のペースに。</p></div></div>
     <div class="grid3">
       <div class="field">
         <label for="batchChars">1 リクエストの文字数上限</label>
@@ -102,17 +107,19 @@
     </div>
   </section>
 
-  <section class="card">
-    <h2>使用量</h2>
+  <section class="card" id="usage-section">
+    <div class="section-heading"><span class="section-number">04</span><div><h2>使用量</h2><p>これまでの翻訳を、ひと目で。</p></div></div>
     <div class="usage" id="usage"></div>
     <div class="inline" style="margin-top:10px">
       <button class="btn ghost small" id="resetUsage">累計をリセット</button>
     </div>
   </section>
 
+  </main>
+  </div>
   <div class="savebar">
-    <button class="btn" id="save">保存</button>
-    <span id="saved" class="ok" hidden>保存しました</span>
+    <button class="btn" id="save">設定を保存</button>
+    <span id="saved" role="status" class="ok" hidden>保存しました</span>
   </div>
 </div>
 <script type="module" src="options.js"></script>

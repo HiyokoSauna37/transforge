@@ -26,7 +26,8 @@
   </section>
 
   <section class="card" id="main" hidden>
-    <div class="status">
+    <div class="reading-intro"><span class="eyebrow">YOUR READING COMPANION</span><h2>いつもの言葉で、読む。</h2></div>
+    <div class="status" role="status" aria-live="polite">
       <span class="dot" id="dot"></span>
       <span id="statusText">--</span>
     </div>
@@ -38,9 +39,10 @@
     </div>
     <p class="err" id="err" hidden></p>
 
+    <div class="preferences">
     <div class="row">
-      <label class="lbl">表示</label>
-      <div class="seg" id="modeSeg">
+      <span class="lbl" id="modeLabel">表示</span>
+      <div class="seg" id="modeSeg" role="group" aria-labelledby="modeLabel">
         <button data-mode="replace" class="segbtn">置き換え</button>
         <button data-mode="bilingual" class="segbtn">対訳</button>
       </div>
@@ -53,6 +55,7 @@
       <label class="lbl" for="model">モデル</label>
       <select id="model"></select>
     </div>
+    </div>
     <label class="check"><input type="checkbox" id="autoHost"><span class="box"></span><span id="autoHostLabel">このサイトは常に翻訳</span></label>
 
     <div class="usage">
@@ -63,7 +66,7 @@
 
   <footer class="foot">
     <button class="link" id="openOptions2">設定</button>
-    <span class="dim">Alt+T で切り替え</span>
+    <span class="dim"><kbd>Alt</kbd> + <kbd>T</kbd> で切り替え</span>
   </footer>
 </div>
 <script type="module" src="popup.js"></script>

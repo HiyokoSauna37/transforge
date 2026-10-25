@@ -62,6 +62,23 @@ button{font:inherit;cursor:pointer}
 .panel .pb.wait{color:var(--muted)}
 .panel .po{padding:10px 16px;border-top:1px dashed var(--line);color:var(--ink2);font-size:12.5px;white-space:pre-wrap;overflow:auto;max-height:140px;background:var(--bg2)}
 .panel .pf{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--line)}
+/* ポップアップと揃えた、紙のようなパネル。 */
+.badge{padding:11px 16px;border-radius:16px;right:20px;bottom:20px}
+.badge .mark{width:23px;height:23px;border-radius:8px}
+.badge .bar{height:2px}
+.selbtn{padding:7px 13px 7px 10px;border-radius:10px;box-shadow:0 3px 12px rgba(86,46,32,.18)}
+.panel{border-radius:18px}
+.panel .ph{padding:14px 16px;background:var(--bg2)}
+.panel .ph .mark{width:23px;height:23px;border-radius:8px}
+.panel .ph .x{width:28px;height:28px;border-radius:7px}
+.panel .ph .x:hover{background:var(--line);color:var(--ink)}
+.panel .pb{padding:20px 22px;line-height:1.9;font-size:14px}
+.panel .po{padding:16px 22px;border-top-style:solid;line-height:1.8}
+.panel .pf{padding:11px 16px;gap:8px}
+.panel .pf button{border-radius:7px;padding:5px 12px}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(max-width:480px){.badge{max-width:calc(100vw - 32px);min-width:0;right:16px;bottom:16px}}
+@media(prefers-reduced-motion:reduce){.badge .spin{animation:none}.badge .bar i{transition:none}}
 [hidden]{display:none !important}
 `;
 
@@ -70,7 +87,7 @@ button{font:inherit;cursor:pointer}
 <div class="badge" hidden><span class="mark">${FEATHER}</span><span class="spin"></span><span class="txt"></span><button class="stop">中止</button><div class="bar"><i></i></div></div>
 <button class="selbtn" hidden>${FEATHER}翻訳</button>
 <div class="panel" hidden>
-  <div class="ph"><span class="t"><span class="mark">${FEATHER}</span>Claude 翻訳</span><span class="cost"></span><button class="x" title="閉じる">×</button></div>
+  <div class="ph"><span class="t"><span class="mark">${FEATHER}</span>Claude 翻訳</span><span class="cost"></span><button class="x" title="閉じる" aria-label="閉じる">×</button></div>
   <div class="pb"></div>
   <div class="po" hidden></div>
   <div class="pf"><button class="copy">コピー</button><button class="orig">原文を表示</button></div>

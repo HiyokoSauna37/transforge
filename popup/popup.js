@@ -94,7 +94,7 @@ async function init() {
   if (!settings.hasKey) $("nokey").hidden = false;
 
   fillSelect($("lang"), LANG_PRESETS, settings.targetLang);
-  fillSelect($("model"), MODELS, settings.model, (m) => `${m.label} — ${m.note}`);
+  fillSelect($("model"), MODELS, settings.model, (m) => m.label);
   const host = tab && tab.url ? safeHost(tab.url) : "";
   $("autoHost").checked = !!host && settings.autoHosts.includes(host);
   $("autoHostLabel").textContent = host ? `${host} は常に翻訳` : "このサイトは常に翻訳";
