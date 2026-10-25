@@ -1,4 +1,4 @@
-// Yomeru UI: ページ内に出す進行バッジ / 選択翻訳ボタン / 翻訳パネル（shadow DOM）。
+// Yomeru UI: ページ内に出す進行バッジ / 選択範囲の操作ボタン / 翻訳・解説パネル（shadow DOM）。
 // 表示だけを担当し、翻訳ロジックは持たない。content.js と同じ isolated world で globalThis.TFUi として共有。
 (() => {
   if (globalThis.TFUi) return;
@@ -115,6 +115,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
   // handlers: {onStop, onTranslateSelection}
   function create(handlers) {
+    // 拡張の再読み込み後、ページに残った旧版の UI と重ならないようにする。
+    document.querySelectorAll("#tf-host[data-tf=ui]").forEach((old) => old.remove());
     const host = document.createElement("div");
     host.id = "tf-host";
     host.setAttribute("data-tf", "ui");

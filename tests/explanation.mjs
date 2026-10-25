@@ -12,25 +12,50 @@ const check = (name) => console.log(`✓ ${name}`);
 try {
   h = await launch({ prefix: "yomeru-explain-", viewport: { width: 1100, height: 850 } });
   const settings = { schema: 2, apiKey: "test-key", apiBase: `http://127.0.0.1:${port}`, model: "claude-sonnet-5-5", effort: "low",
-    targetLang: "日本語", displayMode: "replace", cacheEnabled: true, explanationEnabled: true, skipNav: true, autoHosts: [] };
+    targetLang: "日本語", displayMode: "replace", cacheEnabled: true, skipNav: true, autoHosts: [] };
   await h.setSettings(settings);
   const { page, tabId } = await h.open(`http://127.0.0.1:${port}/context.html`);
   await page.addScriptTag({ path: join(EXT, "content/context.js") });
+  await page.evaluate(() => {
+    const stale = document.createElement("div");
+    stale.id = "tf-host";
+    stale.dataset.tf = "ui";
+    stale.textContent = "旧版の翻訳ボタン";
+    document.documentElement.append(stale);
+  });
   const pick = async (id = "term") => {
     await page.evaluate((id) => {
       const range = document.createRange(); range.selectNodeContents(document.getElementById(id));
       const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
       document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     }, id);
-    await page.waitForFunction(() => { const h = document.getElementById("tf-host"); return h && !h.shadowRoot.querySelector(".selbtn").hidden; });
+    await page.waitForFunction(() => { const h = document.getElementById("tf-host"); return h?.shadowRoot && !h.shadowRoot.querySelector(".selbtn").hidden; });
   };
   const waitResult = (text) => page.waitForFunction((text) => {
     const p = document.getElementById("tf-host").shadowRoot.querySelector(".panel .pb");
     return !p.classList.contains("wait") && p.textContent.includes(text);
   }, text);
   await pick();
+  assert.equal(await page.locator("#tf-host").count(), 1);
   assert.equal(await page.locator("#tf-host .explainbtn").isVisible(), true);
   assert.equal(stats.requests.length, 0);
+  await page.evaluate(() => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "1800px";
+    document.body.append(spacer);
+  });
+  const beforeScroll = await page.locator("#tf-host .seltools").boundingBox();
+  await page.evaluate(() => window.scrollBy(0, 120));
+  await page.waitForFunction((top) => {
+    const tools = document.getElementById("tf-host").shadowRoot.querySelector(".seltools");
+    return !tools.hidden && tools.getBoundingClientRect().top < top - 50;
+  }, beforeScroll.y);
+  await page.evaluate(() => window.scrollBy(0, 1000));
+  await page.waitForFunction(() => document.getElementById("tf-host").shadowRoot.querySelector(".seltools").hidden);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForFunction(() => !document.getElementById("tf-host").shadowRoot.querySelector(".seltools").hidden);
+  assert.equal(await page.locator("#tf-host .explainbtn").isVisible(), true);
+  check("explanation is enabled by default; selection toolbar follows scrolling, hides offscreen and returns with the selection");
   const context = await page.evaluate(() => TFContext.collect("lease", getSelection().getRangeAt(0)));
   const evidence = JSON.stringify(context);
   assert.match(context.nearby, /Workers coordinate ownership/);
@@ -114,6 +139,7 @@ try {
   await options.locator("#save").click();
   await options.waitForSelector("#saved:not([hidden])");
   await pick();
+  await page.waitForFunction(() => document.getElementById("tf-host").shadowRoot.querySelector(".explainbtn").hidden);
   assert.equal(await page.locator("#tf-host .explainbtn").isVisible(), false);
   assert.equal(await page.locator("#tf-host .selbtn").isVisible(), true);
   const disabled = await options.evaluate(() => chrome.runtime.sendMessage({ type: "explain", selection: "lease", context: {} }));
@@ -122,6 +148,7 @@ try {
   await options.locator("#explanationEnabled").locator("..").click();
   await options.locator("#save").click();
   await options.waitForFunction(async () => (await chrome.runtime.sendMessage({ type: "getSettings" })).settings.explanationEnabled === true);
+  await page.waitForFunction(() => !document.getElementById("tf-host").shadowRoot.querySelector(".explainbtn").hidden);
   await page.reload(); await h.waitContent(tabId);
   await pick();
   assert.equal(await page.locator("#tf-host .explainbtn").isVisible(), true);

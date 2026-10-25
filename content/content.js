@@ -1,4 +1,4 @@
-// Yomeru content script: ページ翻訳の進行・適用・復元、追加翻訳（MutationObserver）、選択範囲翻訳。
+// Yomeru content script: ページ翻訳の進行・適用・復元、追加翻訳（MutationObserver）、選択範囲の翻訳・解説。
 // DOM の分割/復元は segmenter.js（TFSeg）、画面表示は ui.js（TFUi）に分けてある。
 (() => {
   if (globalThis.__tfLoaded) return;
@@ -416,22 +416,53 @@
   let explanationSnapshot = null;
   let selectionSessionId = null;
   let selectionRequest = 0;
+  let selectionToolbarActive = false;
+  let selectionPositionFrame = 0;
+
+  function visibleSelectionRect(range) {
+    try {
+      const rects = [...range.getClientRects()];
+      for (let i = rects.length - 1; i >= 0; i--) {
+        const r = rects[i];
+        if (r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth) {
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+        }
+      }
+    } catch { /* 選択範囲が DOM から外れた場合 */ }
+    return null;
+  }
+
+  function refreshSelectionToolbar() {
+    if (!selectionToolbarActive || !selectionSnapshot || ui?.panelOpen) return;
+    const rect = visibleSelectionRect(selectionSnapshot.range);
+    if (rect) getUi().showSelButton(rect, state.settings?.explanationEnabled !== false);
+    else ui?.hideSelButton();
+  }
+
+  function scheduleSelectionToolbar() {
+    if (!selectionToolbarActive || selectionPositionFrame) return;
+    selectionPositionFrame = requestAnimationFrame(() => {
+      selectionPositionFrame = 0;
+      refreshSelectionToolbar();
+    });
+  }
 
   function snapshotSelection() {
     const sel = window.getSelection();
     const text = sel && sel.rangeCount ? sel.toString().trim() : "";
     if (!text || (ui && ui.ownsNode(sel.anchorNode))) return null;
     const range = sel.getRangeAt(0).cloneRange();
-    const r = range.getBoundingClientRect();
-    return { text, range, rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom } };
+    const rect = visibleSelectionRect(range);
+    return { text, range, rect };
   }
 
   function checkSelection() {
     const current = snapshotSelection();
-    if (!current) { if (ui) ui.hideSelButton(); return; }
+    if (!current) { selectionToolbarActive = false; if (ui) ui.hideSelButton(); return; }
     if (ui?.panelOpen) ui.hidePanel();
     selectionSnapshot = current;
-    getUi().showSelButton(current.rect, state.settings?.explanationEnabled !== false);
+    selectionToolbarActive = true;
+    refreshSelectionToolbar();
   }
 
   // 段落区切りは保ち、行内の空白だけ畳む
@@ -449,11 +480,12 @@
   async function runSelection(mode, detail = "brief", reuse = false) {
     const captured = reuse ? explanationSnapshot : (snapshotSelection() || selectionSnapshot);
     if (!captured?.text) return;
+    selectionToolbarActive = false;
     cancelSelection();
     const request = selectionRequest;
     const panel = getUi();
     panel.hideSelButton();
-    panel.openPanel(captured.rect, captured.text, { mode });
+    panel.openPanel(captured.rect || { left: 40, right: 40, top: 40, bottom: 40 }, captured.text, { mode });
     try {
       const settings = await loadSettings();
       if (request !== selectionRequest || !panel.panelOpen) return;
@@ -491,21 +523,24 @@
     if (area !== "local" || !changes.settings || !state.settings) return;
     const enabled = changes.settings.newValue?.explanationEnabled !== false;
     state.settings.explanationEnabled = enabled;
-    if (!enabled && ui) ui.hideSelButton();
+    refreshSelectionToolbar();
   });
 
   const fromUi = (e) => !!ui && ui.ownsEvent(e);
+  window.addEventListener("scroll", scheduleSelectionToolbar, true);
+  window.addEventListener("resize", scheduleSelectionToolbar);
   document.addEventListener("contextmenu", (e) => { if (!fromUi(e)) checkSelection(); }, true);
   document.addEventListener("mouseup", (e) => {
     if (!fromUi(e)) setTimeout(checkSelection, 10);
   }, true);
   document.addEventListener("mousedown", (e) => {
     if (fromUi(e) || !ui) return;
+    selectionToolbarActive = false;
     ui.hideSelButton();
     if (ui.panelOpen) ui.hidePanel();
   }, true);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && ui) { ui.hideSelButton(); ui.hidePanel(); }
+    if (e.key === "Escape" && ui) { selectionToolbarActive = false; ui.hideSelButton(); ui.hidePanel(); }
   }, true);
 
   // ---------- message handler ----------
