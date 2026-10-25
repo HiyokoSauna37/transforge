@@ -62,7 +62,9 @@
     if (opts.skipNav && (NAV.has(tag) || el.getAttribute("role") === "navigation")) return "skip";
     if (el.isContentEditable) return "skip";
     if (OPAQUE.has(tag)) return "opaque";
-    if (noTranslate(el)) return INLINE.has(tag) ? "opaque" : "skip";
+    // ページ全体の翻訳禁止指定はユーザーの翻訳操作を妨げない。
+    // OWASP などは html/body に translate="no" を付ける。個別要素の除外は維持する。
+    if (tag !== "HTML" && tag !== "BODY" && noTranslate(el)) return INLINE.has(tag) ? "opaque" : "skip";
     if (INLINE.has(tag)) {
       if (hasBlockDescendant(el, 0)) return "container";
       return hasWord(el) ? "inline" : "opaque";

@@ -44,6 +44,7 @@ let st = await msg(tabId, { type: "tf:translate", mode: "replace" });
 check(st.status === "translated", "status translated", JSON.stringify(st));
 check(!st.error, "no error", st.error || "");
 check(st.progress.done === st.progress.total && st.progress.total > 0, `progress ${st.progress.done}/${st.progress.total}`);
+check(await page.evaluate(() => document.documentElement.getAttribute("translate") === "no" && document.body.getAttribute("translate") === "no"), "page-wide translate=no preserved while translating (OWASP regression)");
 
 const r1 = await page.evaluate(() => {
   const q = (s) => document.querySelector(s);
