@@ -4,23 +4,28 @@ import { buildRequest, extractText, usageOf, describeHttpError, checkStop } from
 import { buildSystemPrompt, buildUserMessage, parseSegments } from "./shared/prompt.js";
 import { cacheGetMany, cacheSetMany, cacheClear, cacheCount, cachePrune, sha256 } from "./shared/cache.js";
 import { getSettings, saveSettings, addUsage, resetUsage } from "./shared/settings.js";
+import { EXPLAIN_VERSION, normalizeExplanation, buildExplanationSystem, buildExplanationMessage } from "./shared/explain.js";
 
-const CONTENT_JS = ["content/segmenter.js", "content/ui.js", "content/content.js"];
+const CONTENT_JS = ["content/segmenter.js", "content/context.js", "content/ui.js", "content/content.js"];
 const CONTENT_CSS = ["content/content.css"];
 const MENU_SELECTION = "tf-selection";
+const MENU_EXPLAIN = "tf-explain-selection";
 const MAX_RETRY_AFTER_MS = 30000;
 
 const inflight = new Map(); // sessionId -> Set<AbortController>
 
 // ---------- ブラウザ側のイベント ----------
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
+  await chrome.contextMenus.removeAll();
   chrome.contextMenus.create({ id: MENU_SELECTION, title: "選択範囲を Claude で翻訳", contexts: ["selection"] });
+  const s = await getSettings();
+  chrome.contextMenus.create({ id: MENU_EXPLAIN, title: "選択範囲を Yomeru で解説", contexts: ["selection"], visible: s.explanationEnabled !== false });
   cachePrune();
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== MENU_SELECTION || !tab || !tab.id) return;
-  if (await ensureContent(tab.id)) sendToTab(tab.id, { type: "tf:translateSelection" });
+  if (![MENU_SELECTION, MENU_EXPLAIN].includes(info.menuItemId) || !tab || !tab.id) return;
+  if (await ensureContent(tab.id)) sendToTab(tab.id, { type: info.menuItemId === MENU_EXPLAIN ? "tf:explainSelection" : "tf:translateSelection" });
 });
 
 chrome.commands.onCommand.addListener(async (cmd) => {
@@ -77,7 +82,10 @@ function handle(msg, sender) {
     case "getSettingsFull": // options ページ専用（拡張ページからのみ）
       return fromExtensionPage(sender) ? getSettings().then((s) => ({ ok: true, settings: s })) : FORBIDDEN;
     case "saveSettings":
-      return fromExtensionPage(sender) ? saveSettings(msg.partial || {}).then((s) => ({ ok: true, settings: publicSettings(s) })) : FORBIDDEN;
+      return fromExtensionPage(sender) ? saveSettings(msg.partial || {}).then(async (s) => {
+        await chrome.contextMenus.update(MENU_EXPLAIN, { visible: s.explanationEnabled !== false }).catch(() => {});
+        return { ok: true, settings: publicSettings(s) };
+      }) : FORBIDDEN;
     case "resetUsage":
       return resetUsage().then((s) => ({ ok: true, settings: publicSettings(s) }));
     case "cacheStats":
@@ -93,6 +101,8 @@ function handle(msg, sender) {
       return testKey(msg);
     case "translate":
       return translate(msg);
+    case "explain":
+      return explain(msg);
     case "cancel":
       cancelSession(msg.sessionId);
       return Promise.resolve({ ok: true });
@@ -185,6 +195,38 @@ async function translate(msg) {
     await addUsage({ input: u.input + u.cacheRead + u.cacheWrite, output: u.output, costUsd });
   }
   return { ok: true, results, usage, cached, model: s.model };
+}
+
+// ---------- 選択範囲の解説 ----------
+async function explain(msg) {
+  const s = await getSettings();
+  if (s.explanationEnabled === false) throw fatalError("解説機能は設定で無効になっています");
+  if (!s.apiKey) throw fatalError("APIキーが未設定です（拡張の設定画面で登録してください）");
+  const input = normalizeExplanation(msg);
+  const system = buildExplanationSystem(s, input.detail);
+  const message = buildExplanationMessage(input);
+  // 文脈・説明の詳しさ・プロンプトが変われば解説も変わる。
+  const key = await sha256(JSON.stringify([EXPLAIN_VERSION, s.model, s.effort, system, message]));
+  if (s.cacheEnabled) {
+    const hits = await cacheGetMany([key]);
+    if (hits.has(key)) return { ok: true, text: hits.get(key), cached: 1, usage: null, model: s.model };
+  }
+  const req = buildRequest(s, system, message, { maxTokens: input.detail === "detailed" ? 2800 : 1600 });
+  const ctrl = new AbortController();
+  track(msg.sessionId, ctrl);
+  let resp;
+  try { resp = await fetchWithRetry(req, ctrl.signal); }
+  finally { untrack(msg.sessionId, ctrl); }
+  const stop = checkStop(resp);
+  if (!stop.ok) throw fatalError(stop.message);
+  let text = extractText(resp).trim();
+  if (!text) throw new Error("解説を取得できませんでした");
+  if (s.cacheEnabled && !stop.truncated) await cacheSetMany([{ k: key, t: text }]);
+  if (stop.truncated) text += "\n\n（解説が長いため、ここまで表示しています）";
+  const u = usageOf(resp);
+  const costUsd = estimateCostUsd(s.model, u);
+  await addUsage({ input: u.input + u.cacheRead + u.cacheWrite, output: u.output, costUsd });
+  return { ok: true, text, usage: { ...u, costUsd }, cached: 0, model: s.model };
 }
 
 // ---------- HTTP ----------

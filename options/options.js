@@ -56,6 +56,7 @@ async function load() {
   $("customInstructions").value = settings.customInstructions || "";
   $("glossary").value = settings.glossary || "";
   $("skipNav").checked = !!settings.skipNav;
+  $("explanationEnabled").checked = settings.explanationEnabled !== false;
   $("batchChars").value = settings.batchChars;
   $("concurrency").value = settings.concurrency;
   $("usdJpy").value = settings.usdJpy;
@@ -78,6 +79,7 @@ function collect() {
     customInstructions: $("customInstructions").value,
     glossary: $("glossary").value,
     skipNav: $("skipNav").checked,
+    explanationEnabled: $("explanationEnabled").checked,
     batchChars: clamp(Number($("batchChars").value) || DEFAULTS.batchChars, LIMITS.batchChars),
     concurrency: clamp(Number($("concurrency").value) || DEFAULTS.concurrency, LIMITS.concurrency),
     usdJpy: Number($("usdJpy").value) || DEFAULTS.usdJpy,

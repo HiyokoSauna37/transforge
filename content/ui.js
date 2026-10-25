@@ -10,7 +10,7 @@
   const CSS = `
 :host{all:initial}
 *{box-sizing:border-box}
-.badge,.panel,.selbtn{
+.badge,.panel,.selbtn,.seltools{
   --bg:#FFFFFF;--bg2:#F2F0E9;--line:#E7E4DB;--line2:#D8D4C8;--accent:#C76B4D;--accent2:#AF573C;--accent-soft:#F7E9E1;
   --ink:#1F1E1D;--ink2:#5E5C57;--muted:#8E8B82;--ok:#5B8A5F;--err:#C0493D;--err-soft:#F9E6E3;
   --shadow:0 1px 2px rgba(31,30,29,.06),0 10px 30px rgba(31,30,29,.12);
@@ -18,7 +18,7 @@
   color:var(--ink);line-height:1.6;letter-spacing:.01em;-webkit-font-smoothing:antialiased
 }
 @media (prefers-color-scheme: dark){
-  .badge,.panel,.selbtn{--bg:#30302E;--bg2:#3A3936;--line:#3E3D39;--line2:#4C4A45;--ink:#ECEAE3;--ink2:#B8B5AC;--muted:#8C8982;
+  .badge,.panel,.selbtn,.seltools{--bg:#30302E;--bg2:#3A3936;--line:#3E3D39;--line2:#4C4A45;--ink:#ECEAE3;--ink2:#B8B5AC;--muted:#8C8982;
     --accent-soft:#473730;--err-soft:#45302D;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35)}
 }
 .mark{width:18px;height:18px;color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -73,18 +73,30 @@ button{font:inherit;cursor:pointer}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 @media(max-width:480px){.badge{max-width:calc(100vw - 32px);min-width:0;right:16px;bottom:16px}}
 @media(prefers-reduced-motion:reduce){.badge .spin{animation:none}.badge .bar i{transition:none}}
+.seltools{position:fixed;display:flex;gap:4px;align-items:center;background:var(--bg);border:1px solid var(--line);padding:4px;border-radius:13px;box-shadow:var(--shadow)}
+.seltools .selbtn{position:static;box-shadow:none;border-radius:9px;font-size:12px}
+.explainbtn{background:transparent;border:0;border-radius:9px;padding:7px 12px;color:var(--ink2);font-size:12px;font-weight:700}
+.explainbtn:hover{background:var(--accent-soft);color:var(--accent2)}
+.panel .pf{flex-wrap:wrap;align-items:center}
+.panel .pf .refine{color:var(--accent2);background:var(--accent-soft)}
+.panel .sources{padding:14px 20px;border-top:1px solid var(--line);background:var(--bg2);font-size:12px;max-height:190px;overflow:auto}
+.panel .sources p{margin:0 0 12px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
+.panel .sources p:last-child{margin-bottom:0}
+.panel .sources strong{display:block;margin-bottom:4px;font-size:11px;color:var(--ink2)}
+.panel .pf button:disabled{opacity:.5;cursor:wait}
 [hidden]{display:none !important}
 `;
 
   const HTML = `
 <style>${CSS}</style>
 <div class="badge" hidden><span class="mark">${MARK}</span><span class="spin"></span><span class="txt"></span><button class="stop">中止</button><div class="bar"><i></i></div></div>
-<button class="selbtn" hidden>${MARK}翻訳</button>
-<div class="panel" hidden>
-  <div class="ph"><span class="t"><span class="mark">${MARK}</span>Yomeru 翻訳</span><span class="cost"></span><button class="x" title="閉じる" aria-label="閉じる">×</button></div>
-  <div class="pb"></div>
+<div class="seltools" hidden><button class="selbtn" hidden>${MARK}翻訳</button><button class="explainbtn" hidden>解説</button></div>
+<div class="panel" role="dialog" aria-label="Yomeru 選択範囲" hidden>
+  <div class="ph"><span class="t"><span class="mark">${MARK}</span><span class="panel-title">Yomeru 翻訳</span></span><span class="cost"></span><button class="x" title="閉じる" aria-label="閉じる">×</button></div>
+  <div class="pb" aria-live="polite"></div>
   <div class="po" hidden></div>
-  <div class="pf"><button class="copy">コピー</button><button class="orig">原文を表示</button></div>
+  <div class="sources" hidden></div>
+  <div class="pf"><button class="copy">コピー</button><button class="orig">原文を表示</button><button class="refine simple" hidden>もっとやさしく</button><button class="refine detailed" hidden>詳しく</button><button class="source-toggle" aria-expanded="false" hidden>参考箇所</button></div>
 </div>`;
 
   const EDGE = 8; // 画面端からの最小余白(px)
@@ -118,6 +130,9 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
     const badgeStop = $(".badge .stop");
     const badgeBar = $(".badge .bar i");
     const selbtn = $(".selbtn");
+    const seltools = $(".seltools");
+    const explainbtn = $(".explainbtn");
+    const sources = $(".sources");
     const panel = $(".panel");
     const panelBody = $(".panel .pb");
     const panelOrig = $(".panel .po");
@@ -129,8 +144,16 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
     $(".panel .x").addEventListener("click", () => hidePanel());
     $(".panel .copy").addEventListener("click", () => navigator.clipboard.writeText(panelBody.textContent || "").catch(() => {}));
     $(".panel .orig").addEventListener("click", () => { panelOrig.hidden = !panelOrig.hidden; });
-    selbtn.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
+    seltools.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
     selbtn.addEventListener("click", (e) => { e.stopPropagation(); handlers.onTranslateSelection(); });
+    explainbtn.addEventListener("click", (e) => { e.stopPropagation(); handlers.onExplainSelection(); });
+    $(".simple").addEventListener("click", () => handlers.onExplainDetail("simple"));
+    $(".detailed").addEventListener("click", () => handlers.onExplainDetail("detailed"));
+    $(".source-toggle").addEventListener("click", () => {
+      sources.hidden = !sources.hidden;
+      $(".source-toggle").setAttribute("aria-expanded", String(!sources.hidden));
+      if (panelRect) placeFixed(panel, panelRect, 8);
+    });
 
     // kind: "info" | "busy" | "done" | "error"
     function showBadge(text, kind = "info", autoHideMs = 0) {
@@ -151,19 +174,29 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       badgeBar.style.width = total ? `${Math.round((done / total) * 100)}%` : "0";
     }
 
-    function showSelButton(rect) {
+    function showSelButton(rect, explainEnabled = true) {
+      seltools.hidden = false;
       selbtn.hidden = false;
-      placeFixed(selbtn, { left: rect.right + 6, right: rect.right, top: rect.top, bottom: rect.bottom }, 4);
+      explainbtn.hidden = !explainEnabled;
+      placeFixed(seltools, { left: rect.right + 6, right: rect.right, top: rect.top, bottom: rect.bottom }, 4);
     }
     function hideSelButton() {
+      seltools.hidden = true;
       selbtn.hidden = true;
+      explainbtn.hidden = true;
     }
 
     // パネルを「翻訳中…」状態で開く
-    function openPanel(rect, originalText) {
+    function openPanel(rect, originalText, { mode = "translate" } = {}) {
       panelRect = rect;
       panel.hidden = false;
-      panelBody.textContent = "翻訳中…";
+      $(".panel-title").textContent = mode === "explain" ? "Yomeru 解説" : "Yomeru 翻訳";
+      panelBody.textContent = mode === "explain" ? "ページ内の関連情報を集めて解説しています…" : "翻訳中…";
+      for (const b of root.querySelectorAll(".refine")) { b.hidden = mode !== "explain"; b.disabled = true; }
+      sources.replaceChildren();
+      sources.hidden = true;
+      $(".source-toggle").hidden = true;
+      $(".source-toggle").setAttribute("aria-expanded", "false");
       panelBody.classList.add("wait");
       panelOrig.hidden = true;
       panelOrig.textContent = originalText;
@@ -171,6 +204,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       placeFixed(panel, rect, 8);
     }
     function setPanelResult(text, costLabel = "") {
+      for (const b of root.querySelectorAll(".refine")) b.disabled = false;
       panelBody.classList.remove("wait");
       panelBody.textContent = text;
       panelCost.textContent = costLabel;
@@ -180,7 +214,19 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       panelBody.classList.remove("wait");
       panelBody.textContent = text;
     }
+    function setPanelSources(context) {
+      sources.replaceChildren();
+      const rows = [{ heading: "選択箇所の周辺", text: context.nearby }, ...context.excerpts.map((e) => ({ heading: `[${e.id}] ${e.heading || "ページ内の関連箇所"}`, text: e.text }))];
+      for (const row of rows) {
+        if (!row.text) continue;
+        const p = document.createElement("p");
+        const title = document.createElement("strong"); title.textContent = row.heading;
+        p.append(title, document.createTextNode(row.text)); sources.append(p);
+      }
+      $(".source-toggle").hidden = !sources.childNodes.length;
+    }
     function hidePanel() {
+      if (!panel.hidden) handlers.onPanelClose?.();
       panel.hidden = true;
     }
 
@@ -193,7 +239,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       ownsNode: (n) => !!n && (host.contains(n) || root.contains(n)),
       showBadge, hideBadge, showProgress,
       showSelButton, hideSelButton,
-      openPanel, setPanelResult, setPanelMessage, hidePanel,
+      openPanel, setPanelResult, setPanelMessage, setPanelSources, hidePanel,
     };
   }
 

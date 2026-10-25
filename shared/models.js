@@ -30,6 +30,7 @@ export const DEFAULTS = {
   batchChars: 2500,
   concurrency: 4,
   cacheEnabled: true,
+  explanationEnabled: true,    // 選択範囲の解説ボタンと右クリックメニュー
   skipNav: true,               // nav / aside を翻訳対象から外す
   autoHosts: [],               // 常に翻訳するホスト
   usdJpy: 150,

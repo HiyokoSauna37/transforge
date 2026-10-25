@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Yomeru",
   "version": "0.1.0",
-  "description": "Claude API でページを自然な日本語に翻訳する個人用拡張（置換 / 対訳 / 選択範囲）",
+  "description": "Claude API でページを自然な日本語に翻訳する個人用拡張（置換 / 対訳 / 選択範囲・解説）",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -30,7 +30,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/segmenter.js", "content/ui.js", "content/content.js"],
+      "js": ["content/segmenter.js", "content/context.js", "content/ui.js", "content/content.js"],
       "css": ["content/content.css"],
       "run_at": "document_idle"
     }

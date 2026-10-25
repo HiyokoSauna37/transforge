@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(here, "fixture");
 
-export const stats = { requests: [], errorsRemaining: 0 };
+export const stats = { requests: [], errorsRemaining: 0, explanationDelay: 60 };
 
 function parseTree(str) {
   const re = /<\s*(\/?)\s*i(\d+)\s*(\/?)\s*>/g;
@@ -86,11 +86,19 @@ export function startServer(port = 0) {
           return res.end(JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }));
         }
         const user = json.messages[0].content;
+        let explanation = null;
+        try {
+          const payload = JSON.parse(user);
+          if (typeof payload.selected_passage === "string" && payload.page) explanation = payload;
+        } catch { /* 通常の翻訳メッセージ */ }
         const re = /<seg id="(\d+)">([\s\S]*?)<\/seg>/g;
         const out = [];
         let m;
         while ((m = re.exec(user))) out.push(`<seg id="${m[1]}">${mockTranslate(m[2])}</seg>`);
-        const text = out.join("\n");
+        const detail = json.system[0].text.includes("everyday words") ? "やさしい説明" : json.system[0].text.includes("mechanism, assumptions") ? "詳しい説明" : "短い説明";
+        const text = explanation
+          ? `ひとことで\n「${explanation.selected_passage}」の${detail}です。\n\nこのページでは\n${explanation.page.heading || explanation.page.title}\n\n具体例\nページ内の定義と用例を参考にします。${explanation.page.excerpts.length ? " [1]" : ""}`
+          : out.join("\n");
         const resp = {
           id: "msg_mock", type: "message", role: "assistant", model: json.model,
           content: [{ type: "thinking", thinking: "", signature: "x" }, { type: "text", text }],
@@ -100,7 +108,7 @@ export function startServer(port = 0) {
         setTimeout(() => {
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify(resp));
-        }, 60);
+        }, explanation ? stats.explanationDelay : 60);
       });
       return;
     }

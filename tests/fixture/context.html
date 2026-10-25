@@ -1,0 +1,25 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Worker scheduling — runtime leases</title>
+<style>body{font:17px/1.8 Arial,sans-serif;margin:48px auto;max-width:850px;background:#faf9f5;color:#292824}h1{font:38px Georgia,serif}h2{margin-top:32px}.hidden{display:none}pre{background:#eeeae1;padding:16px;border-radius:8px}</style></head><body>
+<nav>lease NAVIGATION_ONLY_SENTINEL</nav>
+<main><article>
+<h1>Runtime leases</h1>
+<h2>Scheduling workers</h2>
+<p id="before">Workers coordinate ownership of a scheduled task before executing it.</p>
+<p id="selected">The worker checks its <strong id="term">lease</strong> before renewing ownership. See the <a href="#renewal-window">renewal window</a> for timing details.</p>
+<p id="after">An expired token prevents a paused worker from renewing ownership.</p>
+<h2>Configuration</h2>
+<p>Use a bounded queue and retry transient network failures with backoff.</p>
+<pre>const active = worker.lease.isValid();</pre>
+<h2>Glossary</h2>
+<dl><dt>lease</dt><dd id="definition">A time-limited ownership token issued by the scheduler. This definition is far from the selected word.</dd></dl>
+<section id="renewal-window"><h2>Renewal timing</h2><p id="linked">Renewal must arrive before the clock deadline. The grace period is 250 milliseconds.</p></section>
+<h2>Other meanings</h2><p>A building lease is a rental contract. This unrelated use must not replace the worker scheduling sense.</p>
+<p hidden>lease HIDDEN_ATTRIBUTE_SENTINEL</p>
+<p class="hidden">lease HIDDEN_CSS_SENTINEL</p>
+<p>Visible text <span hidden>lease HIDDEN_INLINE_SENTINEL</span></p>
+<div contenteditable="true">lease EDITABLE_SENTINEL</div>
+<form><input value="lease INPUT_SENTINEL"><textarea>lease TEXTAREA_SENTINEL</textarea></form>
+<script type="application/json">{"lease":"SCRIPT_SENTINEL"}</script>
+</article></main>
+<footer>lease FOOTER_SENTINEL</footer>
+</body></html>

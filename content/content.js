@@ -5,7 +5,8 @@
   globalThis.__tfLoaded = true;
   const Seg = globalThis.TFSeg;
   const Ui = globalThis.TFUi;
-  if (!Seg || !Ui) return;
+  const Context = globalThis.TFContext;
+  if (!Seg || !Ui || !Context) return;
 
   const RESCAN_DELAY_MS = 700;     // DOM 変化からの追加翻訳までの待ち
   const MAX_INCREMENTAL_RUNS = 60; // ページが書き戻し続ける場合の無限ループ防止
@@ -80,7 +81,7 @@
 
   // ---------- UI ----------
   function getUi() {
-    if (!ui || !ui.connected) ui = Ui.create({ onStop: cancel, onTranslateSelection: translateSelection });
+    if (!ui || !ui.connected) ui = Ui.create({ onStop: cancel, onTranslateSelection: translateSelection, onExplainSelection: () => runSelection("explain"), onExplainDetail: (detail) => runSelection("explain", detail, true), onPanelClose: cancelSelection });
     return ui;
   }
 
@@ -411,44 +412,90 @@
   }
 
   // ---------- selection ----------
-  let selText = "";
+  let selectionSnapshot = null;
+  let explanationSnapshot = null;
+  let selectionSessionId = null;
+  let selectionRequest = 0;
 
-  function checkSelection() {
+  function snapshotSelection() {
     const sel = window.getSelection();
     const text = sel && sel.rangeCount ? sel.toString().trim() : "";
-    if (!text || text.length < 2) { if (ui) ui.hideSelButton(); return; }
-    if (ui && ui.ownsNode(sel.anchorNode)) return;
-    selText = text;
-    getUi().showSelButton(sel.getRangeAt(sel.rangeCount - 1).getBoundingClientRect());
+    if (!text || (ui && ui.ownsNode(sel.anchorNode))) return null;
+    const range = sel.getRangeAt(0).cloneRange();
+    const r = range.getBoundingClientRect();
+    return { text, range, rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom } };
+  }
+
+  function checkSelection() {
+    const current = snapshotSelection();
+    if (!current) { if (ui) ui.hideSelButton(); return; }
+    if (ui?.panelOpen) ui.hidePanel();
+    selectionSnapshot = current;
+    getUi().showSelButton(current.rect, state.settings?.explanationEnabled !== false);
   }
 
   // 段落区切りは保ち、行内の空白だけ畳む
   const normalizeSelection = (text) =>
     text.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n\n");
 
-  async function translateSelection() {
-    const sel = window.getSelection();
-    const text = (sel && sel.rangeCount && sel.toString().trim()) || selText;
-    if (!text) return;
-    const panel = getUi();
-    panel.hideSelButton();
-    let rect = { left: 40, right: 40, top: 40, bottom: 40 };
-    try { rect = sel.getRangeAt(0).getBoundingClientRect(); } catch { /* 選択なし */ }
-    panel.openPanel(rect, text);
-    const settings = state.settings || (await loadSettings().catch(() => null));
-    if (!settings || !settings.hasKey) {
-      panel.setPanelMessage("APIキーが未設定です。拡張の設定画面で登録してください。");
-      return;
-    }
-    const r = await requestTranslation([{ id: 0, text: Seg.esc(normalizeSelection(text)) }], newSessionId());
-    if (!r.ok) { panel.setPanelMessage(`エラー: ${r.error || "不明"}`); return; }
-    const t = r.results && r.results[0];
-    addUsage(r);
-    const cost = r.usage ? costText(r.usage.costUsd || 0) : r.cached ? "cache" : "";
-    panel.setPanelResult(t != null ? Seg.unesc(Seg.stripMarkers(t)) : "（翻訳結果を取得できませんでした）", cost);
+  function cancelSelection() {
+    selectionRequest++;
+    if (selectionSessionId) send({ type: "cancel", sessionId: selectionSessionId }).catch(() => {});
+    selectionSessionId = null;
   }
 
+  const translateSelection = () => runSelection("translate");
+
+  async function runSelection(mode, detail = "brief", reuse = false) {
+    const captured = reuse ? explanationSnapshot : (snapshotSelection() || selectionSnapshot);
+    if (!captured?.text) return;
+    cancelSelection();
+    const request = selectionRequest;
+    const panel = getUi();
+    panel.hideSelButton();
+    panel.openPanel(captured.rect, captured.text, { mode });
+    try {
+      const settings = await loadSettings();
+      if (request !== selectionRequest || !panel.panelOpen) return;
+      if (!settings.hasKey) { panel.setPanelMessage("APIキーが未設定です。拡張の設定画面で登録してください。"); return; }
+      if (mode === "explain" && settings.explanationEnabled === false) { panel.setPanelMessage("解説機能は設定で無効になっています。"); return; }
+      if (mode === "explain" && captured.text.length > 6000) { panel.setPanelMessage("選択範囲を6,000文字以内にしてください。"); return; }
+      let context = null;
+      if (mode === "explain") {
+        context = reuse ? captured.context : Context.collect(captured.text, captured.range);
+        explanationSnapshot = { ...captured, context };
+        panel.setPanelSources(context);
+      } else explanationSnapshot = null;
+      const sessionId = newSessionId();
+      selectionSessionId = sessionId;
+      const keepAlive = setInterval(() => { send({ type: "tf:keepalive" }).catch(() => {}); }, KEEPALIVE_MS);
+      let r;
+      try {
+        r = mode === "explain"
+          ? await send({ type: "explain", sessionId, selection: captured.text, context, detail })
+          : await requestTranslation([{ id: 0, text: Seg.esc(normalizeSelection(captured.text)) }], sessionId);
+      } finally { clearInterval(keepAlive); }
+      if (r?.ok) addUsage(r);
+      if (request !== selectionRequest || !panel.panelOpen) return;
+      selectionSessionId = null;
+      if (!r?.ok) { panel.setPanelMessage(`エラー: ${r?.error || "応答なし"}`); return; }
+      const text = mode === "explain" ? r.text : r.results?.[0];
+      const cost = r.usage ? costText(r.usage.costUsd || 0) : r.cached ? "cache" : "";
+      panel.setPanelResult(text != null ? (mode === "explain" ? text : Seg.unesc(Seg.stripMarkers(text))) : "結果を取得できませんでした", cost);
+    } catch (e) {
+      if (request === selectionRequest && panel.panelOpen) panel.setPanelMessage(`エラー: ${errorMessage(e)}`);
+    }
+  }
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.settings || !state.settings) return;
+    const enabled = changes.settings.newValue?.explanationEnabled !== false;
+    state.settings.explanationEnabled = enabled;
+    if (!enabled && ui) ui.hideSelButton();
+  });
+
   const fromUi = (e) => !!ui && ui.ownsEvent(e);
+  document.addEventListener("contextmenu", (e) => { if (!fromUi(e)) checkSelection(); }, true);
   document.addEventListener("mouseup", (e) => {
     if (!fromUi(e)) setTimeout(checkSelection, 10);
   }, true);
@@ -491,6 +538,10 @@
         else if (state.status === "translated") restorePage();
         else return respondWhenDone(translatePage(), sendResponse);
         sendResponse(getState());
+        return false;
+      case "tf:explainSelection":
+        runSelection("explain");
+        sendResponse({ ok: true });
         return false;
       case "tf:translateSelection":
         translateSelection();
