@@ -3,9 +3,10 @@
 (() => {
   if (globalThis.__tfLoaded) return;
   const Seg = globalThis.TFSeg;
+  const Page = globalThis.TFPage;
   const Ui = globalThis.TFUi;
   const Selection = globalThis.TFSelection;
-  if (!Seg || !Ui || !Selection) return;
+  if (!Seg || !Page || !Ui || !Selection) return;
   globalThis.__tfLoaded = true;
 
   const RESCAN_DELAY_MS = 700;     // DOM 変化からの追加翻訳までの待ち
@@ -17,17 +18,13 @@
     status: "idle", // idle | running | translated
     mode: "replace",
     sessionId: null,
-    records: [],    // 復元用の変更記録
     progress: { done: 0, total: 0 },
     usage: { input: 0, output: 0, costUsd: 0, cached: 0, requests: 0, model: null },
     error: null,
     settings: null,
     incrementalRuns: 0,
   };
-  let done = new WeakSet();              // 翻訳済み（原文ノード + 生成ノード）
-  const translatedText = new WeakMap();  // in-place で書き換えた text node → 訳文
   let cancelled = false;
-  let pendingUnits = null;               // 今回の run で未適用のユニット
   let observer = null;
   let observerTimer = null;
   let suppressed = false;
@@ -113,19 +110,20 @@
       suppressed = false;
     }
   }
+  const page = Page.create({ getMode: () => state.mode, mutate: suppress });
   const isOurs = (n) => !!n && n.nodeType === 1 && n.hasAttribute("data-tf");
 
   function isInterestingMutation(m) {
     if (m.type === "characterData") {
       const n = m.target;
-      if (!done.has(n)) return true;
-      const t = translatedText.get(n);
-      if (t != null && n.data !== t) { done.delete(n); return true; } // ページ側が原文を書き戻した
+      if (!page.isDone(n)) return true;
+      const t = page.translatedValue(n);
+      if (t != null && n.data !== t) { page.forget(n); return true; } // ページ側が原文を書き戻した
       return false;
     }
     if (isOurs(m.target)) return false;
     if (m.type !== "childList") return true;
-    for (const n of m.addedNodes) if (!done.has(n) && !isOurs(n)) return true;
+    for (const n of m.addedNodes) if (!page.isDone(n) && !isOurs(n)) return true;
     return false;
   }
   function startObserver() {
@@ -161,7 +159,7 @@
 
   // ---------- translate ----------
   function collectUnits(settings) {
-    return Seg.collectUnits(document.body, { exclude: done, targetLang: settings.targetLang, skipNav: settings.skipNav });
+    return page.collectUnits(document.body, { targetLang: settings.targetLang, skipNav: settings.skipNav });
   }
 
   async function translatePage(opts = {}) {
@@ -200,8 +198,7 @@
     const sessionId = newSessionId();
     state.sessionId = sessionId;
     Seg.sortByViewport(units);
-    units.forEach((u, i) => { u.id = i; for (const n of u.nodes) done.add(n); });
-    pendingUnits = new Set(units); // 適用できなかったものは最後に done から外して再試行可能にする
+    page.begin(units);
     const batches = Seg.makeBatches(units, settings.batchChars || 2500);
     const concurrency = settings.concurrency || 4;
     state.progress = { done: 0, total: units.length };
@@ -225,7 +222,7 @@
         addUsage(r);
         for (const u of batch) {
           const t = r.results && r.results[u.id];
-          if (t == null || !applyTranslation(u, t, { allowLoose: false })) retry.push(u);
+          if (t == null || !page.applyTranslation(u, t, { allowLoose: false })) retry.push(u);
         }
       }
       state.progress.done += batch.length;
@@ -241,22 +238,21 @@
         if (!r.ok) { noteFailure(r); return; }
         addUsage(r);
         const t = r.results && r.results[u.id];
-        if (t != null) applyTranslation(u, t, { allowLoose: true });
+        if (t != null) page.applyTranslation(u, t, { allowLoose: true });
       });
     }
     stopKeepAlive();
     state.sessionId = null;
-    for (const u of pendingUnits) for (const n of u.nodes) done.delete(n);
-    pendingUnits = null;
+    page.releasePending();
     finishRun({ fatal, wasTranslated, quiet });
   }
 
   function finishRun({ fatal, wasTranslated, quiet }) {
     if (fatal) {
       state.error = fatal;
-      state.status = state.records.length ? "translated" : "idle";
+      state.status = page.hasChanges() ? "translated" : "idle";
       getUi().showBadge(fatal, "error", 8000);
-    } else if (cancelled && !wasTranslated && !state.records.length) {
+    } else if (cancelled && !wasTranslated && !page.hasChanges()) {
       state.status = "idle";
       getUi().showBadge("中止しました", "info", 2000);
     } else {
@@ -270,107 +266,6 @@
     if (state.status === "translated") startObserver();
   }
 
-  // ---------- DOM への適用 ----------
-  // 訳文をユニットに適用。マーカー復元に失敗したら allowLoose のときだけ緩く適用する。戻り値: 適用したか
-  function applyTranslation(u, text, { allowLoose }) {
-    const tree = Seg.parseTranslated(text, u.kinds);
-    if (tree) { applyTree(u, tree); return true; }
-    if (!allowLoose) return false;
-    applyLoose(u, text);
-    return true;
-  }
-
-  function withUnit(u, fn) {
-    if (!u.nodes[0].isConnected) return;
-    if (pendingUnits) pendingUnits.delete(u);
-    suppress(fn);
-  }
-
-  function markGenerated(frag) {
-    const walk = (n) => {
-      done.add(n);
-      if (n.nodeType === 1) n.setAttribute("data-tf", "gen");
-      for (const c of n.childNodes) walk(c);
-    };
-    for (const c of frag.childNodes) walk(c);
-  }
-
-  function applyTree(u, tree) {
-    withUnit(u, () => {
-      if (state.mode === "bilingual") {
-        const frag = Seg.build(tree, u, { stripId: true });
-        markGenerated(frag);
-        insertBilingual(u, frag, false);
-        return;
-      }
-      // replace: まず in-place（元ノードを残す）を試み、構造が違えばクローン置換
-      const inplace = Seg.applyInPlace(tree, u);
-      if (inplace) {
-        for (const n of inplace.touched) { done.add(n); translatedText.set(n, n.data); }
-        for (const r of u.refs) done.add(r);
-        state.records.push({ kind: "inplace", changes: inplace.changes });
-        return;
-      }
-      const frag = Seg.build(tree, u, { stripId: false });
-      markGenerated(frag);
-      replaceRun(u, frag, false);
-    });
-  }
-
-  function applyLoose(u, text) {
-    withUnit(u, () => {
-      const bilingual = state.mode === "bilingual";
-      const frag = Seg.buildLoose(text, u, { stripId: bilingual });
-      markGenerated(frag);
-      if (bilingual) insertBilingual(u, frag, true);
-      else replaceRun(u, frag, true);
-    });
-  }
-
-  function replaceRun(u, frag, loose) {
-    const first = u.nodes[0];
-    const parent = first.parentNode;
-    if (!parent) return;
-    let generated = Array.from(frag.childNodes);
-    if (loose) {
-      const span = document.createElement("span");
-      span.setAttribute("data-tf", "gen");
-      span.setAttribute("data-tf-loose", "1");
-      span.title = "書式マーカーの復元に失敗したため、書式の位置が原文と異なる可能性があります";
-      span.appendChild(frag);
-      done.add(span);
-      generated = [span];
-      parent.insertBefore(span, first);
-    } else {
-      parent.insertBefore(frag, first);
-    }
-    for (const n of u.nodes) n.remove();
-    state.records.push({ kind: "replace", originals: u.nodes, generated, parent });
-  }
-
-  function insertBilingual(u, frag, loose) {
-    const wrapper = document.createElement(u.block ? "div" : "span");
-    wrapper.className = "tf-trans" + (u.block ? " tf-trans-block" : "");
-    wrapper.setAttribute("data-tf", "gen");
-    if (loose) wrapper.setAttribute("data-tf-loose", "1");
-    wrapper.appendChild(frag);
-    done.add(wrapper);
-    const last = u.nodes[u.nodes.length - 1];
-    last.parentNode.insertBefore(wrapper, last.nextSibling);
-    state.records.push({ kind: "bilingual", wrapper });
-  }
-
-  function revertRecord(r) {
-    if (r.kind === "inplace") { Seg.revertInPlace(r.changes); return; }
-    if (r.kind === "bilingual") { r.wrapper.remove(); return; }
-    const anchor = r.generated.find((n) => n.parentNode === r.parent);
-    for (const o of r.originals) {
-      if (anchor) r.parent.insertBefore(o, anchor);
-      else r.parent.appendChild(o);
-    }
-    for (const g of r.generated) g.remove();
-  }
-
   // ---------- 復元 / 中止 ----------
   function cancelSession() {
     cancelled = true;
@@ -381,13 +276,7 @@
     cancelSession();
     stopObserver();
     stopKeepAlive();
-    suppress(() => {
-      for (let i = state.records.length - 1; i >= 0; i--) {
-        try { revertRecord(state.records[i]); } catch { /* ページ側で既に消えた等 */ }
-      }
-    });
-    state.records = [];
-    done = new WeakSet();
+    page.restore();
     state.status = "idle";
     state.progress = { done: 0, total: 0 };
     state.incrementalRuns = 0;
