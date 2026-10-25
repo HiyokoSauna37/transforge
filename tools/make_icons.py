@@ -1,148 +1,81 @@
 # -*- coding: utf-8 -*-
-"""TransForge のアイコン生成: テラコッタの角丸にクリーム色の羽根
-usage: python tools/make_icons.py
-  → icons/icon{16,32,48,128}.png と icons/feather.svg（content.js のインライン SVG と同じ制御点）
-PIL だけで描く（ベジェは折れ線近似、8 倍スーパーサンプリング → LANCZOS 縮小）。
+"""TransForge のロゴ: 原文と訳文を表す二枚のページと、変換の矢印。
+usage: python tools/make_icons.py （Pillow が必要）
+  → icons/icon{16,32,48,128}.png、icons/mark.svg、icons/icon.svg
+  → content/ui.js 内の同じマークも更新する。
+SVG と PNG は同じ座標から生成。8 倍スーパーサンプリングで小サイズを描画。
 """
-import math
-import os
+from pathlib import Path
+import re
 from PIL import Image, ImageDraw
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "..", "icons")
-os.makedirs(OUT, exist_ok=True)
-
-BG = (217, 119, 87)        # #D97757
-BG_DEEP = (196, 98, 63)    # #C4623F
-CREAM = (250, 249, 245)    # #FAF9F5
-ROT = 38                   # 羽根の傾き(度)。SVG rotate と同じ向き(正で先端が右上)
-CX, CY = 64.0, 64.0        # 回転中心(128 基準)
-
-# ---- 羽根の形(128 基準・縦向き、先端が上) ----
-VANE = [  # 閉じたベジェ列 (P0, P1, P2, P3)
-    ((64, 12), (40, 28), (30, 64), (46, 92)),    # 左辺: 先端 → 下
-    ((46, 92), (52, 95), (58, 96), (64, 96)),    # 下端: 左 → 軸
-    ((64, 96), (70, 96), (74, 94), (78, 90)),    # 下端: 軸 → 右
-    ((78, 90), (92, 64), (86, 30), (64, 12)),    # 右辺: 下 → 先端
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "icons"
+BG = "#C76B4D"
+CREAM = "#FAF9F5"
+# (bounds, radius, fill, stroke, stroke width)。背面が原文、前面が訳文。
+PAGES = [
+    ((23, 23, 72, 87), 9, None, CREAM, 6),
+    ((54, 39, 106, 105), 10, CREAM, BG, 6),
 ]
-RACHIS = ((64, 20), (62, 48), (62, 86), (64, 92))   # 羽軸(羽弁の中、背景色で抜く)
-QUILL = ((64, 90), (64, 100), (65, 110), (67, 122))  # 羽柄(羽弁の外、クリーム)
-CUTS = [  # 羽枝の切れ込み: 軸の近く → 外縁の少し外(背景色で抜く)
-    ((62, 50), (37, 36)),
-    ((62, 72), (33, 62)),
-    ((66, 60), (92, 48)),
+LINES = [
+    ([(35, 41), (55, 41)], CREAM, 5),
+    ([(35, 53), (45, 53)], CREAM, 5),
+    ([(67, 61), (92, 61)], BG, 5),
+    ([(85, 54), (92, 61), (85, 68)], BG, 5),
+    ([(68, 82), (91, 82)], BG, 5),
+    ([(68, 92), (82, 92)], BG, 5),
 ]
 
 
-def bez(p0, p1, p2, p3, n=48):
-    pts = []
-    for i in range(n + 1):
-        t = i / n
-        u = 1 - t
-        x = u*u*u*p0[0] + 3*u*u*t*p1[0] + 3*u*t*t*p2[0] + t*t*t*p3[0]
-        y = u*u*u*p0[1] + 3*u*u*t*p1[1] + 3*u*t*t*p2[1] + t*t*t*p3[1]
-        pts.append((x, y))
-    return pts
-
-
-def rot(p, deg=ROT):
-    a = math.radians(deg)
-    dx, dy = p[0] - CX, p[1] - CY
-    return (CX + dx * math.cos(a) - dy * math.sin(a), CY + dx * math.sin(a) + dy * math.cos(a))
-
-
-def vane_polygon():
-    pts = []
-    for seg in VANE:
-        pts.extend(bez(*seg)[:-1])
-    return pts
-
-
-def draw_feather(layer, scale, bold=False):
-    """透明レイヤーにクリームの羽根を描く(切れ込みと羽軸は透明で抜く)。scale = px / 128"""
-    d = ImageDraw.Draw(layer)
-    def P(p):
-        q = rot(p)
-        return (q[0] * scale, q[1] * scale)
-    w_quill = (9 if bold else 6) * scale
-    w_rachis = (0 if bold else 2.6) * scale
-    w_cut = (0 if bold else 3.2) * scale
-    # 羽柄(クリーム、丸端)
-    q = [P(p) for p in bez(*QUILL)]
-    d.line(q, fill=CREAM + (255,), width=int(w_quill), joint="curve")
-    r = int(w_quill / 2)
-    for p in (q[0], q[-1]):
-        d.ellipse((p[0]-r, p[1]-r, p[0]+r, p[1]+r), fill=CREAM + (255,))
-    # 羽弁
-    d.polygon([P(p) for p in vane_polygon()], fill=CREAM + (255,))
-    if bold:
-        return
-    # 羽軸と切れ込みを透明で抜く(PIL は合成せず上書きするので、透明色で描く = 消しゴム)
-    ERASE = (0, 0, 0, 0)
-    rp = [P(p) for p in bez(*RACHIS)]
-    d.line(rp, fill=ERASE, width=int(w_rachis), joint="curve")
-    for a, b in CUTS:
-        pa, pb = P(a), P(b)
-        d.line([pa, pb], fill=ERASE, width=int(w_cut))
-        r = int(w_cut / 2)
-        d.ellipse((pa[0]-r, pa[1]-r, pa[0]+r, pa[1]+r), fill=ERASE)
+def mark_svg():
+    parts = []
+    # 原文の罫線を先に描き、訳文のページで自然に覆う。
+    for i, (bounds, radius, fill, stroke, width) in enumerate(PAGES):
+        x, y, right, bottom = bounds
+        parts.append(f'<rect x="{x}" y="{y}" width="{right-x}" height="{bottom-y}" rx="{radius}" fill="{fill or "none"}" stroke="{stroke}" stroke-width="{width}"/>')
+        for points, color, line_width in (LINES[:2] if i == 0 else LINES[2:]):
+            coords = " ".join(f'{x},{y}' for x, y in points)
+            parts.append(f'<polyline points="{coords}" fill="none" stroke="{color}" stroke-width="{line_width}" stroke-linecap="round" stroke-linejoin="round"/>')
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="16 16 96 96" aria-hidden="true">' + ''.join(parts) + '</svg>'
 
 
 def render(size):
-    SS = 8
-    S = 128 * SS
-    scale = S / 128.0
-    # 背景: 角丸 + 縦グラデ
-    grad = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(grad)
-    for y in range(S):
-        t = y / (S - 1)
-        c = tuple(int(BG[i] * (1 - t) + BG_DEEP[i] * t) for i in range(3)) + (255,)
-        gd.line((0, y, S, y), fill=c)
-    mask = Image.new("L", (S, S), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, S - 1, S - 1), radius=int(S * 0.24), fill=255)
-    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    img.paste(grad, (0, 0), mask)
-    # 羽根
-    layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    draw_feather(layer, scale, bold=size <= 32)
-    img.alpha_composite(layer)
-    return img.resize((size, size), Image.LANCZOS)
-
-
-def svg_path():
-    def f(v):
-        return ("%.1f" % v).rstrip("0").rstrip(".")
-    parts = ["M%s %s" % (f(VANE[0][0][0]), f(VANE[0][0][1]))]
-    for p0, p1, p2, p3 in VANE:
-        parts.append("C%s %s %s %s %s %s" % tuple(f(v) for v in (p1 + p2 + p3)))
-    parts.append("Z")
-    return " ".join(parts)
-
-
-def write_svg():
-    def f(v):
-        return ("%.1f" % v).rstrip("0").rstrip(".")
-    def cpath(seg):
-        p0, p1, p2, p3 = seg
-        return "M%s %s C%s %s %s %s %s %s" % tuple(f(v) for v in (p0 + p1 + p2 + p3))
-    cuts = " ".join("M%s %s L%s %s" % tuple(f(v) for v in (a + b)) for a, b in CUTS)
-    svg = (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" class="fe">'
-        '<g transform="rotate(%d 64 64)" fill="none" stroke-linecap="round">' % ROT +
-        '<path class="fe-c" d="%s" stroke="#FAF9F5" stroke-width="6"/>' % cpath(QUILL) +
-        '<path class="fe-c" d="%s" fill="#FAF9F5" stroke="none"/>' % svg_path() +
-        '<path class="fe-x" d="%s" stroke="#D97757" stroke-width="2.6"/>' % cpath(RACHIS) +
-        '<path class="fe-x" d="%s" stroke="#D97757" stroke-width="3.2"/>' % cuts +
-        '</g></svg>'
-    )
-    with open(os.path.join(OUT, "feather.svg"), "w", encoding="utf-8", newline="\n") as fp:
-        fp.write(svg + "\n")
-    return svg
+    scale = 8
+    canvas_size = 128 * scale
+    image = Image.new("RGBA", (canvas_size, canvas_size))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((0, 0, canvas_size-1, canvas_size-1), radius=28*scale, fill=BG)
+    for i, (bounds, radius, fill, stroke, width) in enumerate(PAGES):
+        # Pillow は輪郭を内側に描くため、SVG の中心線基準へ合わせる。
+        half = width / 2
+        x, y, right, bottom = bounds
+        box = tuple(round(v*scale) for v in (x-half, y-half, right+half, bottom+half))
+        draw.rounded_rectangle(box, radius=round((radius+half)*scale), fill=fill, outline=stroke, width=width*scale)
+        for points, color, line_width in (LINES[:2] if i == 0 else LINES[2:]):
+            scaled = [(x*scale, y*scale) for x, y in points]
+            draw.line(scaled, fill=color, width=line_width*scale, joint="curve")
+            r = line_width*scale/2
+            for x, y in scaled:
+                draw.ellipse((x-r, y-r, x+r, y+r), fill=color)
+    return image.resize((size, size), Image.Resampling.LANCZOS)
 
 
 if __name__ == "__main__":
-    for s in (16, 32, 48, 128):
-        render(s).save(os.path.join(OUT, "icon%d.png" % s))
-        print("wrote icon%d.png" % s)
-    print("wrote feather.svg:", write_svg())
+    OUT.mkdir(exist_ok=True)
+    mark = mark_svg()
+    (OUT / "mark.svg").write_text(mark + "\n", encoding="utf-8")
+    icon = mark.replace('viewBox="16 16 96 96"', 'viewBox="0 0 128 128"').replace('aria-hidden="true">', f'aria-hidden="true"><rect width="128" height="128" rx="28" fill="{BG}"/>', 1)
+    (OUT / "icon.svg").write_text(icon + "\n", encoding="utf-8")
+    for size in (16, 32, 48, 128):
+        render(size).save(OUT / f"icon{size}.png")
+        print(f"wrote icon{size}.png")
+    ui = ROOT / "content" / "ui.js"
+    source = ui.read_text(encoding="utf-8")
+    pattern = r"  // BEGIN GENERATED MARK\n.*?  // END GENERATED MARK"
+    replacement = "  // BEGIN GENERATED MARK\n  const MARK = '" + mark + "';\n  // END GENERATED MARK"
+    source, count = re.subn(pattern, lambda _: replacement, source, flags=re.S)
+    if count != 1:
+        raise RuntimeError("content/ui.js のマーク生成範囲が見つかりません")
+    ui.write_text(source, encoding="utf-8")
+    print("wrote mark.svg, icon.svg and content/ui.js mark")

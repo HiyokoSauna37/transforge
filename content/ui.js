@@ -3,19 +3,15 @@
 (() => {
   if (globalThis.TFUi) return;
 
-  // 羽根ロゴ（icons/feather.svg と同一。tools/make_icons.py が生成）
-  const FEATHER =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" class="fe"><g transform="rotate(38 64 64)" fill="none" stroke-linecap="round">' +
-    '<path class="fe-c" d="M64 90 C64 100 65 110 67 122" stroke="#FAF9F5" stroke-width="6"/>' +
-    '<path class="fe-c" d="M64 12 C40 28 30 64 46 92 C52 95 58 96 64 96 C70 96 74 94 78 90 C92 64 86 30 64 12 Z" fill="#FAF9F5" stroke="none"/>' +
-    '<path class="fe-x" d="M64 20 C62 48 62 86 64 92" stroke="#D97757" stroke-width="2.6"/>' +
-    '<path class="fe-x" d="M62 50 L37 36 M62 72 L33 62 M66 60 L92 48" stroke="#D97757" stroke-width="3.2"/></g></svg>';
+  // BEGIN GENERATED MARK
+  const MARK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="16 16 96 96" aria-hidden="true"><rect x="23" y="23" width="49" height="64" rx="9" fill="none" stroke="#FAF9F5" stroke-width="6"/><polyline points="35,41 55,41" fill="none" stroke="#FAF9F5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="35,53 45,53" fill="none" stroke="#FAF9F5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><rect x="54" y="39" width="52" height="66" rx="10" fill="#FAF9F5" stroke="#C76B4D" stroke-width="6"/><polyline points="67,61 92,61" fill="none" stroke="#C76B4D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="85,54 92,61 85,68" fill="none" stroke="#C76B4D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="68,82 91,82" fill="none" stroke="#C76B4D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="68,92 82,92" fill="none" stroke="#C76B4D" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // END GENERATED MARK
 
   const CSS = `
 :host{all:initial}
 *{box-sizing:border-box}
 .badge,.panel,.selbtn{
-  --bg:#FFFFFF;--bg2:#F2F0E9;--line:#E7E4DB;--line2:#D8D4C8;--accent:#D97757;--accent2:#C4623F;--accent-soft:#F7E9E1;
+  --bg:#FFFFFF;--bg2:#F2F0E9;--line:#E7E4DB;--line2:#D8D4C8;--accent:#C76B4D;--accent2:#AF573C;--accent-soft:#F7E9E1;
   --ink:#1F1E1D;--ink2:#5E5C57;--muted:#8E8B82;--ok:#5B8A5F;--err:#C0493D;--err-soft:#F9E6E3;
   --shadow:0 1px 2px rgba(31,30,29,.06),0 10px 30px rgba(31,30,29,.12);
   font-family:"TransForge Rounded","M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
@@ -26,8 +22,7 @@
     --accent-soft:#473730;--err-soft:#45302D;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35)}
 }
 .mark{width:18px;height:18px;border-radius:6px;background:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:none}
-.mark svg{width:13px;height:13px;display:block}
-.fe-x{stroke:var(--accent)}
+.mark svg{width:18px;height:18px;display:block}
 button{font:inherit;cursor:pointer}
 
 /* 進行バッジ（右下） */
@@ -47,9 +42,8 @@ button{font:inherit;cursor:pointer}
 /* 選択範囲の「翻訳」ボタン */
 .selbtn{position:fixed;display:flex;align-items:center;background:var(--accent);border:none;color:#fff;font-size:12px;font-weight:700;
   padding:4px 11px 4px 8px;border-radius:999px;box-shadow:0 2px 10px rgba(217,119,87,.4)}
-.selbtn svg{width:14px;height:14px;display:block;margin-right:5px}
+.selbtn svg{width:20px;height:20px;display:block;margin-right:5px}
 .selbtn:hover{background:var(--accent2)}
-.selbtn:hover .fe-x{stroke:var(--accent2)}
 
 /* 翻訳パネル */
 .panel{position:fixed;width:min(460px,calc(100vw - 32px));max-height:min(60vh,520px);display:flex;flex-direction:column;
@@ -84,10 +78,10 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
   const HTML = `
 <style>${CSS}</style>
-<div class="badge" hidden><span class="mark">${FEATHER}</span><span class="spin"></span><span class="txt"></span><button class="stop">中止</button><div class="bar"><i></i></div></div>
-<button class="selbtn" hidden>${FEATHER}翻訳</button>
+<div class="badge" hidden><span class="mark">${MARK}</span><span class="spin"></span><span class="txt"></span><button class="stop">中止</button><div class="bar"><i></i></div></div>
+<button class="selbtn" hidden>${MARK}翻訳</button>
 <div class="panel" hidden>
-  <div class="ph"><span class="t"><span class="mark">${FEATHER}</span>Claude 翻訳</span><span class="cost"></span><button class="x" title="閉じる" aria-label="閉じる">×</button></div>
+  <div class="ph"><span class="t"><span class="mark">${MARK}</span>Claude 翻訳</span><span class="cost"></span><button class="x" title="閉じる" aria-label="閉じる">×</button></div>
   <div class="pb"></div>
   <div class="po" hidden></div>
   <div class="pf"><button class="copy">コピー</button><button class="orig">原文を表示</button></div>
