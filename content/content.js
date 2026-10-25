@@ -1,12 +1,12 @@
-// Yomeru content script: ページ翻訳の進行・適用・復元、追加翻訳（MutationObserver）、選択範囲の翻訳・解説。
-// DOM の分割/復元は segmenter.js（TFSeg）、画面表示は ui.js（TFUi）に分けてある。
+// Yomeru content script: ページ翻訳の進行・適用・復元、追加翻訳（MutationObserver）。
+// 選択範囲の操作は selection.js、DOM の分割/復元は segmenter.js、画面表示は ui.js が担当する。
 (() => {
   if (globalThis.__tfLoaded) return;
-  globalThis.__tfLoaded = true;
   const Seg = globalThis.TFSeg;
   const Ui = globalThis.TFUi;
-  const Context = globalThis.TFContext;
-  if (!Seg || !Ui || !Context) return;
+  const Selection = globalThis.TFSelection;
+  if (!Seg || !Ui || !Selection) return;
+  globalThis.__tfLoaded = true;
 
   const RESCAN_DELAY_MS = 700;     // DOM 変化からの追加翻訳までの待ち
   const MAX_INCREMENTAL_RUNS = 60; // ページが書き戻し続ける場合の無限ループ防止
@@ -33,6 +33,7 @@
   let suppressed = false;
   let keepAliveTimer = null;
   let ui = null;
+  let selection = null;
 
   const errorMessage = (e) => String((e && e.message) || e);
   const newSessionId = () => (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
@@ -81,15 +82,7 @@
 
   // ---------- UI ----------
   function getUi() {
-    if (!ui || !ui.connected) ui = Ui.create({
-      onStop: cancel,
-      onTranslateSelection: translateSelection,
-      onExplainSelection: () => runSelection("explain"),
-      onAskSelection: openQuestionComposer,
-      onAskQuestion: (question) => runSelection("explain", "brief", false, question, questionSnapshot),
-      onExplainDetail: (detail) => runSelection("explain", detail, true, explanationSnapshot?.question || ""),
-      onPanelClose: () => { cancelSelection(); questionSnapshot = null; },
-    });
+    if (!ui || !ui.connected) ui = Ui.create({ onStop: cancel, ...selection.handlers });
     return ui;
   }
 
@@ -419,148 +412,26 @@
     };
   }
 
-  // ---------- selection ----------
-  let selectionSnapshot = null;
-  let explanationSnapshot = null;
-  let questionSnapshot = null;
-  let selectionSessionId = null;
-  let selectionRequest = 0;
-  let selectionToolbarActive = false;
-  let selectionPositionFrame = 0;
-
-  function visibleSelectionRect(range) {
-    try {
-      const rects = [...range.getClientRects()];
-      for (let i = rects.length - 1; i >= 0; i--) {
-        const r = rects[i];
-        if (r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth) {
-          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
-        }
-      }
-    } catch { /* 選択範囲が DOM から外れた場合 */ }
-    return null;
-  }
-
-  function refreshSelectionToolbar() {
-    if (!selectionToolbarActive || !selectionSnapshot || ui?.panelOpen) return;
-    const rect = visibleSelectionRect(selectionSnapshot.range);
-    if (rect) getUi().showSelButton(rect, state.settings?.explanationEnabled !== false);
-    else ui?.hideSelButton();
-  }
-
-  function scheduleSelectionToolbar() {
-    if (!selectionToolbarActive || selectionPositionFrame) return;
-    selectionPositionFrame = requestAnimationFrame(() => {
-      selectionPositionFrame = 0;
-      refreshSelectionToolbar();
-    });
-  }
-
-  function snapshotSelection() {
-    const sel = window.getSelection();
-    const text = sel && sel.rangeCount ? sel.toString().trim() : "";
-    if (!text || (ui && ui.ownsNode(sel.anchorNode))) return null;
-    const range = sel.getRangeAt(0).cloneRange();
-    const rect = visibleSelectionRect(range);
-    return { text, range, rect };
-  }
-
-  function checkSelection() {
-    const current = snapshotSelection();
-    if (!current) { selectionToolbarActive = false; if (ui) ui.hideSelButton(); return; }
-    if (ui?.panelOpen) ui.hidePanel();
-    selectionSnapshot = current;
-    selectionToolbarActive = true;
-    refreshSelectionToolbar();
-  }
-
-  // 段落区切りは保ち、行内の空白だけ畳む
-  const normalizeSelection = (text) =>
-    text.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n\n");
-
-  function cancelSelection() {
-    selectionRequest++;
-    if (selectionSessionId) send({ type: "cancel", sessionId: selectionSessionId }).catch(() => {});
-    selectionSessionId = null;
-  }
-
-  const translateSelection = () => runSelection("translate");
-
-  function openQuestionComposer() {
-    const captured = snapshotSelection() || selectionSnapshot;
-    if (!captured?.text) return;
-    selectionToolbarActive = false;
-    questionSnapshot = captured;
-    const panel = getUi();
-    panel.hideSelButton();
-    panel.openQuestionPanel(captured.rect || { left: 40, right: 40, top: 40, bottom: 40 }, captured.text);
-  }
-
-  async function runSelection(mode, detail = "brief", reuse = false, question = "", capturedOverride = null) {
-    const captured = reuse ? explanationSnapshot : (capturedOverride || snapshotSelection() || selectionSnapshot);
-    if (!captured?.text) return;
-    selectionToolbarActive = false;
-    cancelSelection();
-    const request = selectionRequest;
-    const panel = getUi();
-    panel.hideSelButton();
-    panel.openPanel(captured.rect || { left: 40, right: 40, top: 40, bottom: 40 }, captured.text, { mode, question });
-    try {
-      const settings = await loadSettings();
-      if (request !== selectionRequest || !panel.panelOpen) return;
-      if (!settings.hasKey) { panel.setPanelMessage("APIキーが未設定です。拡張の設定画面で登録してください。"); return; }
-      if (mode === "explain" && settings.explanationEnabled === false) { panel.setPanelMessage("解説機能は設定で無効になっています。"); return; }
-      if (mode === "explain" && captured.text.length > 6000) { panel.setPanelMessage("選択範囲を6,000文字以内にしてください。"); return; }
-      let context = null;
-      if (mode === "explain") {
-        context = reuse ? captured.context : Context.collect(captured.text, captured.range, question);
-        explanationSnapshot = { ...captured, context, question };
-        panel.setPanelSources(context);
-      } else explanationSnapshot = null;
-      const sessionId = newSessionId();
-      selectionSessionId = sessionId;
-      const keepAlive = setInterval(() => { send({ type: "tf:keepalive" }).catch(() => {}); }, KEEPALIVE_MS);
-      let r;
-      try {
-        r = mode === "explain"
-          ? await send({ type: "explain", sessionId, selection: captured.text, context, detail, question })
-          : await requestTranslation([{ id: 0, text: Seg.esc(normalizeSelection(captured.text)) }], sessionId);
-      } finally { clearInterval(keepAlive); }
-      if (r?.ok) addUsage(r);
-      if (request !== selectionRequest || !panel.panelOpen) return;
-      selectionSessionId = null;
-      if (!r?.ok) { panel.setPanelMessage(`エラー: ${r?.error || "応答なし"}`); return; }
-      const text = mode === "explain" ? r.text : r.results?.[0];
-      const cost = r.usage ? costText(r.usage.costUsd || 0) : r.cached ? "cache" : "";
-      panel.setPanelResult(text != null ? (mode === "explain" ? text : Seg.unesc(Seg.stripMarkers(text))) : "結果を取得できませんでした", cost);
-    } catch (e) {
-      if (request === selectionRequest && panel.panelOpen) panel.setPanelMessage(`エラー: ${errorMessage(e)}`);
-    }
-  }
+  // ---------- selection controller ----------
+  selection = Selection.create({
+    getUi,
+    peekUi: () => ui,
+    getSettings: () => state.settings,
+    loadSettings,
+    send,
+    requestTranslation,
+    addUsage,
+    costText,
+    newSessionId,
+    errorMessage,
+    keepAliveMs: KEEPALIVE_MS,
+  });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !changes.settings || !state.settings) return;
-    const enabled = changes.settings.newValue?.explanationEnabled !== false;
-    state.settings.explanationEnabled = enabled;
-    refreshSelectionToolbar();
+    state.settings.explanationEnabled = changes.settings.newValue?.explanationEnabled !== false;
+    selection.refreshToolbar();
   });
-
-  const fromUi = (e) => !!ui && ui.ownsEvent(e);
-  window.addEventListener("scroll", scheduleSelectionToolbar, true);
-  window.addEventListener("resize", scheduleSelectionToolbar);
-  document.addEventListener("contextmenu", (e) => { if (!fromUi(e)) checkSelection(); }, true);
-  document.addEventListener("mouseup", (e) => {
-    if (!fromUi(e)) setTimeout(checkSelection, 10);
-  }, true);
-  document.addEventListener("mousedown", (e) => {
-    if (fromUi(e) || !ui) return;
-    selectionToolbarActive = false;
-    ui.hideSelButton();
-    if (ui.panelOpen) ui.hidePanel();
-  }, true);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && ui) { selectionToolbarActive = false; ui.hideSelButton(); ui.hidePanel(); }
-  }, true);
 
   // ---------- message handler ----------
   // 非同期処理の完了後に状態を返す（失敗時はエラーを添える）
@@ -594,11 +465,11 @@
         sendResponse(getState());
         return false;
       case "tf:explainSelection":
-        runSelection("explain");
+        selection.explain();
         sendResponse({ ok: true });
         return false;
       case "tf:translateSelection":
-        translateSelection();
+        selection.translate();
         sendResponse({ ok: true });
         return false;
       default:

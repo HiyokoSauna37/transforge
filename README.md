@@ -113,8 +113,9 @@ manifest.json          MV3
 background.js          service worker: API 呼び出し・再試行・キャッシュ・使用量・注入
 content/segmenter.js   DOM → セグメント化（マーカー直列化 / 復元 / in-place 適用）。純粋な DOM ロジック
 content/context.js     選択箇所と質問の語をもとに、周辺やページ内の関連する定義・用例を収集
-content/ui.js          ページ内 UI（進行バッジ・選択翻訳ボタン・翻訳パネル）の shadow DOM。表示だけを担当
-content/content.js     翻訳の進行・適用・復元、MutationObserver による追い翻訳、選択翻訳、メッセージ処理
+content/ui.js          ページ内 UI（進行バッジ・選択操作・結果パネル）の shadow DOM。表示だけを担当
+content/selection.js   選択範囲の翻訳・解説・質問、スクロール追従、リクエストの中止
+content/content.js     ページ翻訳の進行・適用・復元、MutationObserver による追い翻訳、メッセージ処理
 content/content.css    対訳モードの訳文スタイルと UI 用フォントの @font-face
 popup/, options/       ポップアップと設定ページ（shared/theme.css の Claude 風暖色テーマ、shared/ui.js の共通ヘルパー）
 fonts/                 UI 用の丸ゴシック M PLUS Rounded 1c（OFL、woff2 サブセット・ページ本文には使わない）

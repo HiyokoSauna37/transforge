@@ -122,7 +122,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
     el.style.top = `${Math.max(EDGE, top)}px`;
   }
 
-  // handlers: {onStop, onTranslateSelection}
+  // 翻訳停止は content.js、選択範囲の操作は selection.js から受け取る。
   function create(handlers) {
     // 拡張の再読み込み後、ページに残った旧版の UI と重ならないようにする。
     document.querySelectorAll("#tf-host[data-tf=ui]").forEach((old) => old.remove());

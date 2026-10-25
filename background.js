@@ -6,8 +6,8 @@ import { cacheGetMany, cacheSetMany, cacheClear, cacheCount, cachePrune, sha256 
 import { getSettings, saveSettings, addUsage, resetUsage } from "./shared/settings.js";
 import { EXPLAIN_VERSION, normalizeExplanation, buildExplanationSystem, buildExplanationMessage } from "./shared/explain.js";
 
-const CONTENT_JS = ["content/segmenter.js", "content/context.js", "content/ui.js", "content/content.js"];
-const CONTENT_CSS = ["content/content.css"];
+// インストール前から開いていたタブへの注入順も manifest の定義を使う。
+const { js: CONTENT_JS, css: CONTENT_CSS } = chrome.runtime.getManifest().content_scripts[0];
 const MENU_PAGE = "tf-page";
 const MENU_SELECTION = "tf-selection";
 const MENU_EXPLAIN = "tf-explain-selection";
