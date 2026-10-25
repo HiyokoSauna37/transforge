@@ -75,8 +75,15 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.badge .spin{animation:none}.badge .bar i{transition:none}}
 .seltools{position:fixed;display:flex;gap:4px;align-items:center;background:var(--bg);border:1px solid var(--line);padding:4px;border-radius:13px;box-shadow:var(--shadow)}
 .seltools .selbtn{position:static;box-shadow:none;border-radius:9px;font-size:12px}
-.explainbtn{background:transparent;border:0;border-radius:9px;padding:7px 12px;color:var(--ink2);font-size:12px;font-weight:700}
-.explainbtn:hover{background:var(--accent-soft);color:var(--accent2)}
+.explainbtn,.questionbtn{background:transparent;border:0;border-radius:9px;padding:7px 12px;color:var(--ink2);font-size:12px;font-weight:700}
+.explainbtn:hover,.questionbtn:hover{background:var(--accent-soft);color:var(--accent2)}
+.panel .question-asked{padding:12px 20px;background:var(--accent-soft);color:var(--ink2);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:116px;overflow:auto}
+.panel .question-form{padding:0 20px 18px;display:flex;flex-direction:column;gap:8px}
+.panel .question-form label{font-size:12px;font-weight:700;color:var(--ink2)}
+.panel .question-form textarea{width:100%;min-height:78px;max-height:160px;resize:vertical;border:1px solid var(--line2);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px;line-height:1.6;padding:9px 11px}
+.panel .question-form textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.panel .question-form button{align-self:flex-end;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;padding:7px 15px}
+.panel .question-form button:hover{background:var(--accent2)}
 .panel .pf{flex-wrap:wrap;align-items:center}
 .panel .pf .refine{color:var(--accent2);background:var(--accent-soft)}
 .panel .sources{padding:14px 20px;border-top:1px solid var(--line);background:var(--bg2);font-size:12px;max-height:190px;overflow:auto}
@@ -90,10 +97,12 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
   const HTML = `
 <style>${CSS}</style>
 <div class="badge" hidden><span class="mark">${MARK}</span><span class="spin"></span><span class="txt"></span><button class="stop">中止</button><div class="bar"><i></i></div></div>
-<div class="seltools" hidden><button class="selbtn" hidden>${MARK}翻訳</button><button class="explainbtn" hidden>解説</button></div>
+<div class="seltools" hidden><button class="selbtn" hidden>${MARK}翻訳</button><button class="explainbtn" hidden>解説</button><button class="questionbtn" hidden>質問</button></div>
 <div class="panel" role="dialog" aria-label="Yomeru 選択範囲" hidden>
   <div class="ph"><span class="t"><span class="mark">${MARK}</span><span class="panel-title">Yomeru 翻訳</span></span><span class="cost"></span><button class="x" title="閉じる" aria-label="閉じる">×</button></div>
+  <div class="question-asked" hidden></div>
   <div class="pb" aria-live="polite"></div>
+  <form class="question-form" hidden><label for="tf-question">選択箇所について聞きたいこと</label><textarea id="tf-question" maxlength="1000" required placeholder="例：ここでの意味は？"></textarea><button type="submit">質問する</button></form>
   <div class="po" hidden></div>
   <div class="sources" hidden></div>
   <div class="pf"><button class="copy">コピー</button><button class="orig">原文を表示</button><button class="refine simple" hidden>もっとやさしく</button><button class="refine detailed" hidden>詳しく</button><button class="source-toggle" aria-expanded="false" hidden>参考箇所</button></div>
@@ -134,6 +143,9 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
     const selbtn = $(".selbtn");
     const seltools = $(".seltools");
     const explainbtn = $(".explainbtn");
+    const questionbtn = $(".questionbtn");
+    const questionForm = $(".question-form");
+    const questionInput = $(".question-form textarea");
     const sources = $(".sources");
     const panel = $(".panel");
     const panelBody = $(".panel .pb");
@@ -149,6 +161,12 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
     seltools.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
     selbtn.addEventListener("click", (e) => { e.stopPropagation(); handlers.onTranslateSelection(); });
     explainbtn.addEventListener("click", (e) => { e.stopPropagation(); handlers.onExplainSelection(); });
+    questionbtn.addEventListener("click", (e) => { e.stopPropagation(); handlers.onAskSelection(); });
+    questionForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const question = questionInput.value.trim();
+      if (question) handlers.onAskQuestion(question);
+    });
     $(".simple").addEventListener("click", () => handlers.onExplainDetail("simple"));
     $(".detailed").addEventListener("click", () => handlers.onExplainDetail("detailed"));
     $(".source-toggle").addEventListener("click", () => {
@@ -180,20 +198,27 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       seltools.hidden = false;
       selbtn.hidden = false;
       explainbtn.hidden = !explainEnabled;
+      questionbtn.hidden = !explainEnabled;
       placeFixed(seltools, { left: rect.right + 6, right: rect.right, top: rect.top, bottom: rect.bottom }, 4);
     }
     function hideSelButton() {
       seltools.hidden = true;
       selbtn.hidden = true;
       explainbtn.hidden = true;
+      questionbtn.hidden = true;
     }
 
     // パネルを「翻訳中…」状態で開く
-    function openPanel(rect, originalText, { mode = "translate" } = {}) {
+    function openPanel(rect, originalText, { mode = "translate", question = "" } = {}) {
       panelRect = rect;
       panel.hidden = false;
-      $(".panel-title").textContent = mode === "explain" ? "Yomeru 解説" : "Yomeru 翻訳";
+      $(".panel-title").textContent = mode === "question" || question ? "Yomeru に質問" : mode === "explain" ? "Yomeru 解説" : "Yomeru 翻訳";
+      $(".question-asked").hidden = !question;
+      const selectedPreview = originalText.length > 160 ? `${originalText.slice(0, 160)}…` : originalText;
+      $(".question-asked").textContent = question ? `選択箇所：${selectedPreview}\n質問：${question}` : "";
       panelBody.textContent = mode === "explain" ? "ページ内の関連情報を集めて解説しています…" : "翻訳中…";
+      questionForm.hidden = true;
+      $(".panel .pf").hidden = false;
       for (const b of root.querySelectorAll(".refine")) { b.hidden = mode !== "explain"; b.disabled = true; }
       sources.replaceChildren();
       sources.hidden = true;
@@ -204,6 +229,19 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       panelOrig.textContent = originalText;
       panelCost.textContent = "";
       placeFixed(panel, rect, 8);
+    }
+    function openQuestionPanel(rect, originalText) {
+      openPanel(rect, originalText, { mode: "question" });
+      const selectedPreview = originalText.length > 160 ? `${originalText.slice(0, 160)}…` : originalText;
+      $(".question-asked").textContent = `選択箇所：${selectedPreview}`;
+      $(".question-asked").hidden = false;
+      panelBody.classList.remove("wait");
+      panelBody.textContent = "選択箇所とページ内の関連情報をもとに回答します。";
+      questionInput.value = "";
+      questionForm.hidden = false;
+      $(".panel .pf").hidden = true;
+      placeFixed(panel, rect, 8);
+      questionInput.focus();
     }
     function setPanelResult(text, costLabel = "") {
       for (const b of root.querySelectorAll(".refine")) b.disabled = false;
@@ -241,7 +279,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       ownsNode: (n) => !!n && (host.contains(n) || root.contains(n)),
       showBadge, hideBadge, showProgress,
       showSelButton, hideSelButton,
-      openPanel, setPanelResult, setPanelMessage, setPanelSources, hidePanel,
+      openPanel, openQuestionPanel, setPanelResult, setPanelMessage, setPanelSources, hidePanel,
     };
   }
 

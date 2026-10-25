@@ -210,7 +210,7 @@ async function explain(msg) {
   if (s.explanationEnabled === false) throw fatalError("解説機能は設定で無効になっています");
   if (!s.apiKey) throw fatalError("APIキーが未設定です（拡張の設定画面で登録してください）");
   const input = normalizeExplanation(msg);
-  const system = buildExplanationSystem(s, input.detail);
+  const system = buildExplanationSystem(s, input.detail, input.question);
   const message = buildExplanationMessage(input);
   // 文脈・説明の詳しさ・プロンプトが変われば解説も変わる。
   const key = await sha256(JSON.stringify([EXPLAIN_VERSION, s.model, s.effort, system, message]));

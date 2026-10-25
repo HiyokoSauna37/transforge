@@ -9,6 +9,7 @@
 <p id="after">An expired token prevents a paused worker from renewing ownership.</p>
 <h2>Configuration</h2>
 <p>Use a bounded queue and retry transient network failures with backoff.</p>
+<h2>Failure recovery</h2><p id="quorum">Quorum recovery requires three healthy workers before the scheduler accepts a new owner.</p>
 <pre>const active = worker.lease.isValid();</pre>
 <h2>Glossary</h2>
 <dl><dt>lease</dt><dd id="definition">A time-limited ownership token issued by the scheduler. This definition is far from the selected word.</dd></dl>

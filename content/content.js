@@ -81,7 +81,15 @@
 
   // ---------- UI ----------
   function getUi() {
-    if (!ui || !ui.connected) ui = Ui.create({ onStop: cancel, onTranslateSelection: translateSelection, onExplainSelection: () => runSelection("explain"), onExplainDetail: (detail) => runSelection("explain", detail, true), onPanelClose: cancelSelection });
+    if (!ui || !ui.connected) ui = Ui.create({
+      onStop: cancel,
+      onTranslateSelection: translateSelection,
+      onExplainSelection: () => runSelection("explain"),
+      onAskSelection: openQuestionComposer,
+      onAskQuestion: (question) => runSelection("explain", "brief", false, question, questionSnapshot),
+      onExplainDetail: (detail) => runSelection("explain", detail, true, explanationSnapshot?.question || ""),
+      onPanelClose: () => { cancelSelection(); questionSnapshot = null; },
+    });
     return ui;
   }
 
@@ -414,6 +422,7 @@
   // ---------- selection ----------
   let selectionSnapshot = null;
   let explanationSnapshot = null;
+  let questionSnapshot = null;
   let selectionSessionId = null;
   let selectionRequest = 0;
   let selectionToolbarActive = false;
@@ -477,15 +486,25 @@
 
   const translateSelection = () => runSelection("translate");
 
-  async function runSelection(mode, detail = "brief", reuse = false) {
-    const captured = reuse ? explanationSnapshot : (snapshotSelection() || selectionSnapshot);
+  function openQuestionComposer() {
+    const captured = snapshotSelection() || selectionSnapshot;
+    if (!captured?.text) return;
+    selectionToolbarActive = false;
+    questionSnapshot = captured;
+    const panel = getUi();
+    panel.hideSelButton();
+    panel.openQuestionPanel(captured.rect || { left: 40, right: 40, top: 40, bottom: 40 }, captured.text);
+  }
+
+  async function runSelection(mode, detail = "brief", reuse = false, question = "", capturedOverride = null) {
+    const captured = reuse ? explanationSnapshot : (capturedOverride || snapshotSelection() || selectionSnapshot);
     if (!captured?.text) return;
     selectionToolbarActive = false;
     cancelSelection();
     const request = selectionRequest;
     const panel = getUi();
     panel.hideSelButton();
-    panel.openPanel(captured.rect || { left: 40, right: 40, top: 40, bottom: 40 }, captured.text, { mode });
+    panel.openPanel(captured.rect || { left: 40, right: 40, top: 40, bottom: 40 }, captured.text, { mode, question });
     try {
       const settings = await loadSettings();
       if (request !== selectionRequest || !panel.panelOpen) return;
@@ -494,8 +513,8 @@
       if (mode === "explain" && captured.text.length > 6000) { panel.setPanelMessage("選択範囲を6,000文字以内にしてください。"); return; }
       let context = null;
       if (mode === "explain") {
-        context = reuse ? captured.context : Context.collect(captured.text, captured.range);
-        explanationSnapshot = { ...captured, context };
+        context = reuse ? captured.context : Context.collect(captured.text, captured.range, question);
+        explanationSnapshot = { ...captured, context, question };
         panel.setPanelSources(context);
       } else explanationSnapshot = null;
       const sessionId = newSessionId();
@@ -504,7 +523,7 @@
       let r;
       try {
         r = mode === "explain"
-          ? await send({ type: "explain", sessionId, selection: captured.text, context, detail })
+          ? await send({ type: "explain", sessionId, selection: captured.text, context, detail, question })
           : await requestTranslation([{ id: 0, text: Seg.esc(normalizeSelection(captured.text)) }], sessionId);
       } finally { clearInterval(keepAlive); }
       if (r?.ok) addUsage(r);

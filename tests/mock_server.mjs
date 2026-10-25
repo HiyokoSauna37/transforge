@@ -97,7 +97,9 @@ export function startServer(port = 0) {
         while ((m = re.exec(user))) out.push(`<seg id="${m[1]}">${mockTranslate(m[2])}</seg>`);
         const detail = json.system[0].text.includes("everyday words") ? "やさしい説明" : json.system[0].text.includes("mechanism, assumptions") ? "詳しい説明" : "短い説明";
         const text = explanation
-          ? `ひとことで\n「${explanation.selected_passage}」の${detail}です。\n\nこのページでは\n${explanation.page.heading || explanation.page.title}\n\n具体例\nページ内の定義と用例を参考にします。${explanation.page.excerpts.length ? " [1]" : ""}`
+          ? explanation.user_question
+            ? `質問への回答：${explanation.user_question}\n「${explanation.selected_passage}」についてページ内の情報を参照しました。${explanation.page.excerpts.length ? " [1]" : ""}`
+            : `ひとことで\n「${explanation.selected_passage}」の${detail}です。\n\nこのページでは\n${explanation.page.heading || explanation.page.title}\n\n具体例\nページ内の定義と用例を参考にします。${explanation.page.excerpts.length ? " [1]" : ""}`
           : out.join("\n");
         const resp = {
           id: "msg_mock", type: "message", role: "assistant", model: json.model,

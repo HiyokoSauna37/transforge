@@ -70,6 +70,7 @@ try {
   assert.equal(stats.requests.length, 1);
   const payload = JSON.parse(stats.requests[0].body.messages[0].content);
   assert.equal(payload.selected_passage, "lease");
+  assert.equal("user_question" in payload, false);
   assert.match(JSON.stringify(payload.page), /time-limited ownership token/);
   assert.match(JSON.stringify(payload.page), /250 milliseconds/);
   assert.match(stats.requests[0].body.system[0].text, /untrusted material/);
@@ -104,6 +105,35 @@ try {
   await waitResult("【lease】");
   assert.equal(stats.requests.length, 5);
   check("changed page evidence invalidates explanation cache; normal translation remains independent");
+
+  await pick();
+  assert.equal(await page.locator("#tf-host .questionbtn").isVisible(), true);
+  await page.locator("#tf-host .questionbtn").click();
+  assert.equal(stats.requests.length, 5);
+  assert.equal(await page.locator("#tf-host .question-form").isVisible(), true);
+  await page.locator("#tf-host .question-form button").click();
+  assert.equal(stats.requests.length, 5);
+  const question = "lease が切れた後、quorum は必要？";
+  await page.locator("#tf-host .question-form textarea").fill(question);
+  await page.locator("#tf-host .question-form button").click();
+  await waitResult("質問への回答");
+  assert.equal(stats.requests.length, 6);
+  const asked = JSON.parse(stats.requests[5].body.messages[0].content);
+  assert.equal(asked.selected_passage, "lease");
+  assert.equal(asked.user_question, question);
+  assert.match(JSON.stringify(asked.page), /time-limited ownership token/);
+  assert.match(JSON.stringify(asked.page), /Quorum recovery requires three healthy workers/);
+  assert.match(stats.requests[5].body.system[0].text, /Answer the user's question directly/);
+  assert.match(await page.locator("#tf-host .question-asked").textContent(), /quorum は必要/);
+  await page.locator("#tf-host .simple").click();
+  await waitResult("質問への回答");
+  assert.equal(stats.requests.length, 7);
+  assert.equal(JSON.parse(stats.requests[6].body.messages[0].content).user_question, question);
+  await page.locator("#tf-host .simple").click();
+  await waitResult("質問への回答");
+  assert.equal(stats.requests.length, 7);
+  assert.equal(await page.locator("#tf-host .cost").textContent(), "cache");
+  check("question form sends no request until submission; question, selection and page evidence are sent together and refinements keep the question");
 
   const budget = await page.evaluate(() => {
     const holder = document.createElement("section");
@@ -141,6 +171,7 @@ try {
   await pick();
   await page.waitForFunction(() => document.getElementById("tf-host").shadowRoot.querySelector(".explainbtn").hidden);
   assert.equal(await page.locator("#tf-host .explainbtn").isVisible(), false);
+  assert.equal(await page.locator("#tf-host .questionbtn").isVisible(), false);
   assert.equal(await page.locator("#tf-host .selbtn").isVisible(), true);
   const disabled = await options.evaluate(() => chrome.runtime.sendMessage({ type: "explain", selection: "lease", context: {} }));
   assert.equal(disabled.ok, false);
@@ -152,10 +183,14 @@ try {
   await page.reload(); await h.waitContent(tabId);
   await pick();
   assert.equal(await page.locator("#tf-host .explainbtn").isVisible(), true);
+  assert.equal(await page.locator("#tf-host .questionbtn").isVisible(), true);
   check("settings persist, update the toolbar live, and prevent disabled explanations in the background");
 
   const bad = await options.evaluate(() => chrome.runtime.sendMessage({ type: "explain", selection: "x".repeat(6001), context: {} }));
   assert.equal(bad.ok, false);
+  const longQuestion = await options.evaluate(() => chrome.runtime.sendMessage({ type: "explain", selection: "lease", question: "x".repeat(1001), context: {} }));
+  assert.equal(longQuestion.ok, false);
+  assert.match(longQuestion.error, /1,000/);
   const usage = (await h.msg(tabId, { type: "tf:state" })).usage;
   assert.ok(usage.costUsd >= 0);
   console.log("ALL EXPLANATION TESTS PASSED");

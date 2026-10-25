@@ -26,7 +26,9 @@ const server = http.createServer((req, res) => {
         return `<seg id="${id}">${translations.get(source)}</seg>`;
       }).join("\n");
       const text = explanation
-        ? "ひとことで\nここでの context は、言葉の意味を判断するための周囲の情報です。\n\nこのページでは\n前後の文章に加えて、ページ内の用語の定義やリンク先も手がかりにしています。[1]\n\n具体例\n同じ単語でも、周囲の説明によって自然な訳し方が変わります。"
+        ? explanation.user_question
+          ? "このページでは context は、言葉の意味を判断するための周囲の情報です。[1]\n\n前後の文章やページ内の説明を読むことで、同じ英単語でもこの場面に合う自然な訳を選べます。"
+          : "ひとことで\nここでの context は、言葉の意味を判断するための周囲の情報です。\n\nこのページでは\n前後の文章に加えて、ページ内の用語の定義やリンク先も手がかりにしています。[1]\n\n具体例\n同じ単語でも、周囲の説明によって自然な訳し方が変わります。"
         : translated;
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ id: "msg_readme_demo", type: "message", role: "assistant", model: json.model,
@@ -109,6 +111,19 @@ try {
   const firstEvidence = await page.evaluate(() => document.getElementById("tf-host").shadowRoot.querySelector(".sources p:nth-child(2)")?.textContent || "");
   if (!firstEvidence.includes("surrounding information")) throw new Error(`Explanation demo citation [1] is not supported: ${firstEvidence}`);
   await shot(page, "explanation");
+  await page.evaluate(() => {
+    const node = document.querySelector("#selection-demo").firstChild;
+    const start = node.data.indexOf("context");
+    const range = document.createRange(); range.setStart(node, start); range.setEnd(node, start + "context".length);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+  await page.waitForFunction(() => !document.getElementById("tf-host").shadowRoot.querySelector(".questionbtn").hidden);
+  await page.locator("#tf-host .questionbtn").click();
+  await page.locator("#tf-host .question-form textarea").fill("この文脈は翻訳にどう役立つ？");
+  await page.locator("#tf-host .question-form button").click();
+  await page.waitForFunction(() => document.getElementById("tf-host").shadowRoot.querySelector(".panel .pb").textContent.includes("このページでは context"));
+  await shot(page, "question");
   // 設定画面は通常の接続先を表示。API へは送信せず、デモ用キーのみを使う。
   await h.sw.evaluate(async () => { const { settings } = await chrome.storage.local.get("settings"); await chrome.storage.local.set({ settings: { ...settings, apiBase: "https://api.anthropic.com" } }); });
   const options = await h.ctx.newPage();

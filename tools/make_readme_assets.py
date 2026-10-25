@@ -79,6 +79,6 @@ def to_webp(name, max_width=None):
 
 
 if __name__ == "__main__":
-    for n in ("replace", "bilingual", "selection", "explanation", "popup", "options"):
+    for n in ("replace", "bilingual", "selection", "explanation", "question", "popup", "options"):
         to_webp(n)
     compare(os.path.join(SHOTS, "before.png"), os.path.join(SHOTS, "replace.png"), os.path.join(SHOTS, "compare.webp"))

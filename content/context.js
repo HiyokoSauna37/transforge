@@ -38,7 +38,7 @@
     return [...result].slice(0, 50);
   }
 
-  function collect(selection, range) {
+  function collect(selection, range, question = "") {
     const anchor = range?.startContainer;
     const anchorEl = anchor?.nodeType === 1 ? anchor : anchor?.parentElement;
     const selectionRoot = anchorEl?.getRootNode();
@@ -82,6 +82,7 @@
     if (!heading && local) heading = local.heading;
     const localText = local?.text || normalize(selection);
     const selectedTerms = terms(selection);
+    const questionTerms = terms(question).filter((t) => t.length >= 3);
     const nearbyTerms = terms(localText).filter((t) => t.length >= 4).slice(0, 20);
     const selected = normalize(selection).toLowerCase();
     const selectedWord = selected.length <= 80 && /^[a-z0-9_]+$/i.test(selected)
@@ -105,6 +106,10 @@
       for (const t of selectedTerms) {
         if (lower.includes(t)) item.score += 5;
         if (section.includes(t)) item.score += 3;
+      }
+      for (const t of questionTerms) {
+        if (lower.includes(t)) item.score += 10;
+        if (section.includes(t)) item.score += 4;
       }
       for (const t of nearbyTerms) if (lower.includes(t)) item.score += 0.5;
       if (heading && item.heading === heading) item.score += 2;

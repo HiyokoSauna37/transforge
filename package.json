@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Chrome extension: translate pages and explain selections with the Claude API (personal use)",
+  "description": "Chrome extension: translate pages, explain selections, and answer questions with the Claude API (personal use)",
   "scripts": {
     "icons": "python tools/make_icons.py",
     "check": "node tools/check.mjs",

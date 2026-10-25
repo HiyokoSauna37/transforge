@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Yomeru",
   "version": "0.1.0",
-  "description": "Claude API でページを自然な日本語に翻訳する個人用拡張（置換 / 対訳 / 選択範囲・解説）",
+  "description": "Claude API でページを自然な日本語に翻訳し、選択箇所を解説・質問できる個人用拡張",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
