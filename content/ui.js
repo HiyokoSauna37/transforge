@@ -62,10 +62,21 @@ button{font:inherit;cursor:pointer}
 .badge .bar{height:2px}
 .selbtn{padding:7px 13px 7px 10px;border-radius:10px;box-shadow:0 3px 12px rgba(86,46,32,.18)}
 .panel{border-radius:18px}
-.panel .ph{padding:14px 16px;background:var(--bg2)}
+.panel .ph{padding:14px 16px;background:var(--bg2);gap:6px;flex-wrap:wrap}
+.panel .ph .t{min-width:0;cursor:grab;touch-action:none;user-select:none}
+.panel.dragging .ph .t{cursor:grabbing}
+.panel .panel-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .panel .ph .mark{width:23px;height:23px;border-radius:8px}
 .panel .ph .x{width:28px;height:28px;border-radius:7px}
 .panel .ph .x:hover{background:var(--line);color:var(--ink)}
+.panel .ph .icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;border:0;border-radius:7px;background:transparent;color:var(--ink2);padding:5px}
+.panel .ph .icon:hover{background:var(--line);color:var(--ink)}
+.panel .ph .icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.panel .ph .icon[aria-expanded="true"]{background:var(--accent-soft);color:var(--accent2)}
+.panel .model-row{display:flex;align-items:center;gap:8px;flex-basis:100%;padding-top:6px;font-size:11px;color:var(--ink2)}
+.panel .model-row select{font:inherit;max-width:220px;min-width:0;padding:4px 26px 4px 8px;border:1px solid var(--line2);border-radius:7px;background:var(--bg);color:var(--ink2);cursor:pointer}
+.panel .model-row select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel .model-row .hint{font-size:10px;color:var(--muted)}
 .panel .pb{padding:20px 22px;line-height:1.9;font-size:14px}
 .panel .po{padding:16px 22px;border-top-style:solid;line-height:1.8}
 .panel .pf{padding:11px 16px;gap:8px}
@@ -84,8 +95,14 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .panel .question-form textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
 .panel .question-form button{align-self:flex-end;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;padding:7px 15px}
 .panel .question-form button:hover{background:var(--accent2)}
+.panel.composing{max-height:min(78vh,680px)}
+.panel.composing .pb{min-height:72px;flex-shrink:1}
+.panel .question-form{flex-shrink:0}
+.panel .question-form button:disabled{opacity:.5;cursor:wait}
+.panel .pf .followup{color:var(--accent2);background:var(--accent-soft);font-weight:700}
 .panel .pf{flex-wrap:wrap;align-items:center}
-.panel .pf .refine{color:var(--accent2);background:var(--accent-soft)}
+.panel .pf .refine{color:var(--ink2);background:var(--bg2)}
+.panel .pf .refine:hover{color:var(--ink);background:var(--line)}
 .panel .sources{padding:14px 20px;border-top:1px solid var(--line);background:var(--bg2);font-size:12px;max-height:190px;overflow:auto}
 .panel .sources p{margin:0 0 12px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
 .panel .sources p:last-child{margin-bottom:0}
@@ -99,13 +116,13 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 <div class="badge" hidden><span class="mark">${MARK}</span><span class="spin"></span><span class="txt"></span><button class="stop">中止</button><div class="bar"><i></i></div></div>
 <div class="seltools" hidden><button class="selbtn" hidden>${MARK}翻訳</button><button class="explainbtn" hidden>解説</button><button class="questionbtn" hidden>質問</button></div>
 <div class="panel" role="dialog" aria-label="Yomeru 選択範囲" hidden>
-  <div class="ph"><span class="t"><span class="mark">${MARK}</span><span class="panel-title">Yomeru 翻訳</span></span><span class="cost"></span><button class="x" title="閉じる" aria-label="閉じる">×</button></div>
+  <div class="ph"><span class="t"><span class="mark">${MARK}</span><span class="panel-title">Yomeru 翻訳</span></span><span class="cost"></span><button class="icon copy" title="コピー" aria-label="コピー"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button><button class="icon orig" title="原文を表示" aria-label="原文を表示" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h6"/></svg></button><button class="icon source-toggle" title="参考箇所" aria-label="参考箇所" aria-expanded="false" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v16M12 5C9 3 5 3 2 4v15c3-1 7-1 10 2 3-3 7-3 10-2V4c-3-1-7-1-10 1zM5 8h3M5 12h3M16 8h3M16 12h3"/></svg></button><button class="x" title="閉じる" aria-label="閉じる">×</button><div class="model-row" hidden><label for="tf-panel-model">モデル</label><select id="tf-panel-model" aria-label="解説のモデル"></select><span class="hint">次の質問・解説から</span></div></div>
   <div class="question-asked" hidden></div>
   <div class="pb" aria-live="polite"></div>
   <form class="question-form" hidden><label for="tf-question">選択箇所について聞きたいこと</label><textarea id="tf-question" maxlength="1000" required placeholder="例：ここでの意味は？"></textarea><button type="submit">質問する</button></form>
   <div class="po" hidden></div>
   <div class="sources" hidden></div>
-  <div class="pf"><button class="copy">コピー</button><button class="orig">原文を表示</button><button class="refine simple" hidden>もっとやさしく</button><button class="refine detailed" hidden>詳しく</button><button class="source-toggle" aria-expanded="false" hidden>参考箇所</button></div>
+  <div class="pf"><button class="refine simple" hidden>もっとやさしく</button><button class="refine detailed" hidden>詳しく</button><button class="followup" hidden>質問</button></div>
 </div>`;
 
   const EDGE = 8; // 画面端からの最小余白(px)
@@ -146,18 +163,77 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
     const questionbtn = $(".questionbtn");
     const questionForm = $(".question-form");
     const questionInput = $(".question-form textarea");
+    const modelRow = $(".model-row");
+    const modelSelect = $(".model-row select");
     const sources = $(".sources");
     const panel = $(".panel");
     const panelBody = $(".panel .pb");
     const panelOrig = $(".panel .po");
     const panelCost = $(".panel .cost");
+    const dragHandle = $(".panel .ph .t");
     let badgeTimer = null;
     let panelRect = null;
+    let manualPosition = null;
+    let drag = null;
+
+    function movePanel(left, top) {
+      const position = {
+        left: Math.max(EDGE, Math.min(left, innerWidth - panel.offsetWidth - EDGE)),
+        top: Math.max(EDGE, Math.min(top, innerHeight - panel.offsetHeight - EDGE)),
+      };
+      panel.style.left = `${position.left}px`;
+      panel.style.top = `${position.top}px`;
+      return position;
+    }
+    function positionPanel() {
+      if (panel.hidden || !panelRect) return;
+      if (manualPosition) movePanel(manualPosition.left, manualPosition.top);
+      else placeFixed(panel, panelRect, 8);
+    }
+    function endDrag() {
+      const pointerId = drag?.pointerId;
+      drag = null;
+      panel.classList.remove("dragging");
+      if (pointerId != null && dragHandle.hasPointerCapture(pointerId)) dragHandle.releasePointerCapture(pointerId);
+    }
+    dragHandle.title = "ドラッグして移動";
+    dragHandle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || !event.isPrimary || panel.hidden) return;
+      const rect = panel.getBoundingClientRect();
+      drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+      dragHandle.setPointerCapture(event.pointerId);
+      panel.classList.add("dragging");
+      event.preventDefault();
+    });
+    dragHandle.addEventListener("pointermove", (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      manualPosition = movePanel(drag.left + event.clientX - drag.x, drag.top + event.clientY - drag.y);
+      event.preventDefault();
+    });
+    for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) {
+      dragHandle.addEventListener(name, (event) => { if (drag?.pointerId === event.pointerId) endDrag(); });
+    }
+    function resizePanel() {
+      if (!host.isConnected) {
+        sizeObserver.disconnect();
+        window.removeEventListener("resize", resizePanel);
+        return;
+      }
+      positionPanel();
+    }
+    // 回答・フォーム・原文の開閉や textarea の高さ変更も、手動位置を尊重して画面内に収める。
+    const sizeObserver = new ResizeObserver(resizePanel);
+    sizeObserver.observe(panel);
+    window.addEventListener("resize", resizePanel);
 
     badgeStop.addEventListener("click", () => handlers.onStop());
     $(".panel .x").addEventListener("click", () => hidePanel());
     $(".panel .copy").addEventListener("click", () => navigator.clipboard.writeText(panelBody.textContent || "").catch(() => {}));
-    $(".panel .orig").addEventListener("click", () => { panelOrig.hidden = !panelOrig.hidden; });
+    $(".panel .orig").addEventListener("click", () => {
+      panelOrig.hidden = !panelOrig.hidden;
+      $(".panel .orig").setAttribute("aria-expanded", String(!panelOrig.hidden));
+      positionPanel();
+    });
     seltools.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
     selbtn.addEventListener("click", (e) => { e.stopPropagation(); handlers.onTranslateSelection(); });
     explainbtn.addEventListener("click", (e) => { e.stopPropagation(); handlers.onExplainSelection(); });
@@ -165,14 +241,19 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
     questionForm.addEventListener("submit", (e) => {
       e.preventDefault();
       const question = questionInput.value.trim();
-      if (question) handlers.onAskQuestion(question);
+      if (!question || questionInput.disabled) return;
+      questionInput.disabled = true;
+      questionForm.querySelector("button").disabled = true;
+      handlers.onAskQuestion(question);
     });
+    $(".followup").addEventListener("click", () => handlers.onFollowupQuestion());
+    modelSelect.addEventListener("change", () => handlers.onPanelModelChange(modelSelect.value));
     $(".simple").addEventListener("click", () => handlers.onExplainDetail("simple"));
     $(".detailed").addEventListener("click", () => handlers.onExplainDetail("detailed"));
     $(".source-toggle").addEventListener("click", () => {
       sources.hidden = !sources.hidden;
       $(".source-toggle").setAttribute("aria-expanded", String(!sources.hidden));
-      if (panelRect) placeFixed(panel, panelRect, 8);
+      positionPanel();
     });
 
     // kind: "info" | "busy" | "done" | "error"
@@ -210,15 +291,22 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
     // パネルを「翻訳中…」状態で開く
     function openPanel(rect, originalText, { mode = "translate", question = "" } = {}) {
+      handlers.onPanelOpen?.(mode);
+      if (panel.hidden) manualPosition = null;
       panelRect = rect;
       panel.hidden = false;
-      $(".panel-title").textContent = mode === "question" || question ? "Yomeru に質問" : mode === "explain" ? "Yomeru 解説" : "Yomeru 翻訳";
+      panel.classList.remove("composing");
+      modelRow.hidden = !["explain", "question"].includes(mode) || !modelSelect.options.length;
+      $(".panel-title").textContent = mode === "image" ? "Yomeru 画像翻訳" : mode === "question" || question ? "Yomeru に質問" : mode === "explain" ? "Yomeru 解説" : "Yomeru 翻訳";
       $(".question-asked").hidden = !question;
       const selectedPreview = originalText.length > 160 ? `${originalText.slice(0, 160)}…` : originalText;
       $(".question-asked").textContent = question ? `選択箇所：${selectedPreview}\n質問：${question}` : "";
-      panelBody.textContent = mode === "explain" ? "ページ内の関連情報を集めて解説しています…" : "翻訳中…";
+      panelBody.textContent = mode === "image" ? "画像内の文字を読み取って翻訳しています…" : mode === "explain" ? "ページ内の関連情報を集めて解説しています…" : "翻訳中…";
       questionForm.hidden = true;
-      $(".panel .pf").hidden = false;
+      $(".followup").hidden = true;
+      questionInput.disabled = false;
+      questionForm.querySelector("button").disabled = false;
+      $(".panel .pf").hidden = mode !== "explain";
       for (const b of root.querySelectorAll(".refine")) { b.hidden = mode !== "explain"; b.disabled = true; }
       sources.replaceChildren();
       sources.hidden = true;
@@ -226,9 +314,11 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       $(".source-toggle").setAttribute("aria-expanded", "false");
       panelBody.classList.add("wait");
       panelOrig.hidden = true;
+      $(".panel .orig").hidden = mode === "image";
+      $(".panel .orig").setAttribute("aria-expanded", "false");
       panelOrig.textContent = originalText;
       panelCost.textContent = "";
-      placeFixed(panel, rect, 8);
+      positionPanel();
     }
     function openQuestionPanel(rect, originalText) {
       openPanel(rect, originalText, { mode: "question" });
@@ -238,21 +328,55 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       panelBody.classList.remove("wait");
       panelBody.textContent = "選択箇所とページ内の関連情報をもとに回答します。";
       questionInput.value = "";
+      questionForm.querySelector("label").textContent = "選択箇所について聞きたいこと";
       questionForm.hidden = false;
       $(".panel .pf").hidden = true;
-      placeFixed(panel, rect, 8);
+      positionPanel();
       questionInput.focus();
     }
-    function setPanelResult(text, costLabel = "") {
+    function openFollowupQuestion(question = "") {
+      panel.classList.add("composing");
+      questionForm.querySelector("label").textContent = "この解説について続けて質問";
+      questionInput.value = question;
+      questionInput.disabled = false;
+      questionForm.querySelector("button").disabled = false;
+      questionForm.hidden = false;
+      $(".followup").hidden = true;
+      sources.hidden = true;
+      $(".source-toggle").setAttribute("aria-expanded", "false");
+      panelOrig.hidden = true;
+      $(".panel .orig").setAttribute("aria-expanded", "false");
+      positionPanel();
+      questionInput.focus();
+    }
+    function setPanelModels(models, current) {
+      modelSelect.replaceChildren();
+      for (const model of models || []) {
+        const option = document.createElement("option");
+        option.value = model.id;
+        option.textContent = model.label;
+        modelSelect.append(option);
+      }
+      modelSelect.value = current || "";
+      modelRow.hidden = !modelSelect.options.length;
+    }
+    function setPanelResult(text, costLabel = "", { canFollowup = false } = {}) {
       for (const b of root.querySelectorAll(".refine")) b.disabled = false;
+      $(".followup").hidden = !canFollowup;
       panelBody.classList.remove("wait");
       panelBody.textContent = text;
       panelCost.textContent = costLabel;
-      if (panelRect) placeFixed(panel, panelRect, 8);
+      positionPanel();
     }
     function setPanelMessage(text) {
       panelBody.classList.remove("wait");
       panelBody.textContent = text;
+    }
+    function setPanelOriginal(text) {
+      panelOrig.textContent = text;
+      panelOrig.hidden = true;
+      $(".panel .orig").hidden = !text;
+      $(".panel .orig").setAttribute("aria-expanded", "false");
     }
     function setPanelSources(context) {
       sources.replaceChildren();
@@ -266,6 +390,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       $(".source-toggle").hidden = !sources.childNodes.length;
     }
     function hidePanel() {
+      endDrag();
       if (!panel.hidden) handlers.onPanelClose?.();
       panel.hidden = true;
     }
@@ -279,7 +404,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       ownsNode: (n) => !!n && (host.contains(n) || root.contains(n)),
       showBadge, hideBadge, showProgress,
       showSelButton, hideSelButton,
-      openPanel, openQuestionPanel, setPanelResult, setPanelMessage, setPanelSources, hidePanel,
+      openPanel, openQuestionPanel, openFollowupQuestion, setPanelModels, setPanelResult, setPanelMessage, setPanelOriginal, setPanelSources, hidePanel,
     };
   }
 

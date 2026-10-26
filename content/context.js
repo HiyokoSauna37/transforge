@@ -8,7 +8,7 @@
   const COMMON = new Set(["the", "and", "for", "this", "that", "with", "from", "into", "your", "you", "are", "was", "were", "have", "has", "had", "can", "will", "what", "when", "where", "which", "not", "each", "page", "text"]);
 
   function allowed(el) {
-    if (!el || el.closest(OMIT)) return false;
+    if (!el || el.closest(OMIT) || globalThis.TFExclusions?.isWithinAd(el)) return false;
     try { return !el.checkVisibility || el.checkVisibility({ visibilityProperty: true }); } catch { return true; }
   }
 

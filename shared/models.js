@@ -25,6 +25,8 @@ export const DEFAULTS = {
   effort: "low",
   targetLang: "日本語",
   displayMode: "replace",      // "replace" | "bilingual"
+  subtitleTargetLang: "English",
+  subtitleMode: "bilingual",
   customInstructions: "",
   glossary: "",                // 1行1語: "term = 訳語"
   batchChars: 2500,

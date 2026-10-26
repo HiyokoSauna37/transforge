@@ -2,12 +2,24 @@
 import { DEFAULTS, SETTINGS_SCHEMA } from "./models.js";
 
 const KEY = "settings";
+let pending = Promise.resolve();
 
-export async function getSettings() {
+// ページ翻訳・字幕・解説が並行しても使用量や設定のread-modify-writeを上書きしない。
+function serialize(operation) {
+  const result = pending.then(operation);
+  pending = result.catch(() => {});
+  return result;
+}
+
+async function readSettings() {
   const got = await chrome.storage.local.get(KEY);
   const s = got[KEY] || {};
   if (Object.keys(s).length && (s.schema || 1) < SETTINGS_SCHEMA) await migrate(s);
   return { ...DEFAULTS, ...s, usage: { ...DEFAULTS.usage, ...(s.usage || {}) } };
+}
+
+export function getSettings() {
+  return serialize(readSettings);
 }
 
 // 保存済み設定の一度きりの追従。明示的に選んだ値は触らず、旧既定のまま残っているものだけ新既定へ寄せる
@@ -18,24 +30,28 @@ async function migrate(s) {
   await chrome.storage.local.set({ [KEY]: s });
 }
 
-export async function saveSettings(partial) {
-  const cur = await getSettings();
-  const next = { ...cur, ...partial };
-  await chrome.storage.local.set({ [KEY]: next });
-  return next;
+export function saveSettings(partial) {
+  return serialize(async () => {
+    const cur = await readSettings();
+    const next = { ...cur, ...partial };
+    await chrome.storage.local.set({ [KEY]: next });
+    return next;
+  });
 }
 
-export async function addUsage(delta) {
-  const cur = await getSettings();
-  const u = cur.usage;
-  const next = {
-    input: u.input + (delta.input || 0),
-    output: u.output + (delta.output || 0),
-    costUsd: u.costUsd + (delta.costUsd || 0),
-    requests: u.requests + 1,
-  };
-  await chrome.storage.local.set({ [KEY]: { ...cur, usage: next } });
-  return next;
+export function addUsage(delta) {
+  return serialize(async () => {
+    const cur = await readSettings();
+    const u = cur.usage;
+    const next = {
+      input: u.input + (delta.input || 0),
+      output: u.output + (delta.output || 0),
+      costUsd: u.costUsd + (delta.costUsd || 0),
+      requests: u.requests + 1,
+    };
+    await chrome.storage.local.set({ [KEY]: { ...cur, usage: next } });
+    return next;
+  });
 }
 
 export async function resetUsage() {

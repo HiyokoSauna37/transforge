@@ -56,8 +56,11 @@
   // "skip" | "opaque" | "inline" | "container"
   function classify(el, opts) {
     const tag = tagOf(el);
+    if (globalThis.TFExclusions?.isWithinAd(el)) return "skip";
     if (isForeign(el)) return "opaque";
     if (isOurs(el)) return "skip";
+    // 動画字幕・文字起こしは専用コントローラが原文を扱う。ページ翻訳で書き換えない。
+    if (location.hostname === "www.youtube.com" && el.matches("#movie_player, ytd-transcript-renderer, ytd-transcript-segment-list-renderer, transcript-segment-view-model")) return "skip";
     if (SKIP.has(tag)) return "skip";
     if (opts.skipNav && (NAV.has(tag) || el.getAttribute("role") === "navigation")) return "skip";
     if (el.isContentEditable) return "skip";

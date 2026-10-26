@@ -25,6 +25,20 @@
     <p class="muted">このページでは使えません（chrome:// やストアなど）。</p>
   </section>
 
+  <section class="card youtube-card" id="youtube" hidden aria-labelledby="youtubeTitle">
+    <span class="eyebrow">YOUTUBE</span>
+    <h2 id="youtubeTitle">字幕を、自然な言葉に。</h2>
+    <p class="muted youtube-hint">前後の文脈をもとに字幕を翻訳します。英語の字幕は自然な表現に整えます。</p>
+    <div class="row"><label class="lbl" for="subtitleLang">字幕の言語</label><select id="subtitleLang"><option value="English">English</option><option value="日本語">日本語</option></select></div>
+    <div class="row"><label class="lbl" for="subtitleMode">表示</label><select id="subtitleMode"><option value="bilingual">原文と併記</option><option value="replace">翻訳字幕のみ</option></select></div>
+    <div class="row"><label class="lbl" for="subtitleModel">モデル</label><select id="subtitleModel"></select></div>
+    <p id="subtitleStatus" class="muted" role="status" aria-live="polite">字幕付きの通常動画に対応しています。</p>
+    <div class="btnrow"><button class="btn" id="subtitleStart">字幕を翻訳</button><button class="btn ghost" id="subtitleStop" hidden>字幕を停止</button></div>
+    <p id="subtitleError" class="err" hidden></p>
+    <p class="muted youtube-hint" id="subtitleCost"></p>
+    <p class="muted youtube-hint">開始すると字幕を Claude に送信します。API利用料がかかります。字幕取得のため文字起こし欄が開くことがあります。</p>
+  </section>
+
   <section class="card" id="main" hidden>
     <div class="reading-intro"><span class="eyebrow">YOUR READING COMPANION</span><h2>いつもの言葉で、読む。</h2></div>
     <div class="status" role="status" aria-live="polite">

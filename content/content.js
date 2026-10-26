@@ -6,7 +6,9 @@
   const Page = globalThis.TFPage;
   const Ui = globalThis.TFUi;
   const Selection = globalThis.TFSelection;
-  if (!Seg || !Page || !Ui || !Selection) return;
+  const Exclusions = globalThis.TFExclusions;
+  const ImageTranslator = globalThis.TFImage;
+  if (!Seg || !Page || !Ui || !Selection || !ImageTranslator) return;
   globalThis.__tfLoaded = true;
 
   const RESCAN_DELAY_MS = 700;     // DOM 変化からの追加翻訳までの待ち
@@ -26,11 +28,13 @@
   };
   let cancelled = false;
   let observer = null;
+  let observedRoots = new WeakSet();
   let observerTimer = null;
   let suppressed = false;
   let keepAliveTimer = null;
   let ui = null;
   let selection = null;
+  let imageTranslator = null;
 
   const errorMessage = (e) => String((e && e.message) || e);
   const newSessionId = () => (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
@@ -79,7 +83,13 @@
 
   // ---------- UI ----------
   function getUi() {
-    if (!ui || !ui.connected) ui = Ui.create({ onStop: cancel, ...selection.handlers });
+    if (!ui || !ui.connected) ui = Ui.create({ onStop: cancel, ...selection.handlers,
+      onPanelOpen: (mode) => {
+        if (mode === "image") selection.handlers.onPanelClose();
+        else imageTranslator?.cancel();
+      },
+      onPanelClose: () => { selection.handlers.onPanelClose(); imageTranslator?.cancel(); },
+    });
     return ui;
   }
 
@@ -111,9 +121,15 @@
     }
   }
   const page = Page.create({ getMode: () => state.mode, mutate: suppress });
+  const hasPageChanges = () => page.hasChanges() || !!Exclusions?.hasHiddenAds();
+  const hideAds = (root = document.body) => suppress(() => Exclusions?.hideAds(root) || 0);
   const isOurs = (n) => !!n && n.nodeType === 1 && n.hasAttribute("data-tf");
 
   function isInterestingMutation(m) {
+    const parent = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+    if (parent?.closest("[data-tf]")) return false;
+    if (Exclusions?.isWithinAd(parent)) return false;
+    if (location.hostname === "www.youtube.com" && parent?.closest("#movie_player, ytd-transcript-renderer, ytd-transcript-segment-list-renderer, transcript-segment-view-model")) return false;
     if (m.type === "characterData") {
       const n = m.target;
       if (!page.isDone(n)) return true;
@@ -130,16 +146,36 @@
     if (observer) return;
     observer = new MutationObserver((muts) => {
       if (suppressed || state.status !== "translated") return;
+      // 翻訳後に配信された広告も画面から外す。本文の追い翻訳回数とは独立して処理する。
+      for (const mutation of muts) for (const node of mutation.addedNodes || []) observeShadowRoots(node);
+      const roots = new Set(muts.filter((m) => m.type === "childList" || m.type === "attributes").map((m) => m.target));
+      for (const root of roots) {
+        const element = root.nodeType === 1 ? root : root.host;
+        if (element && !element.closest("[data-tf]")) hideAds(root);
+      }
       if (muts.some(isInterestingMutation)) scheduleRescan();
     });
-    observer.observe(document.documentElement, {
+    observeRoot(document.documentElement);
+    observeShadowRoots(document.body);
+  }
+  function observeRoot(root) {
+    if (!observer || observedRoots.has(root)) return;
+    observer.observe(root, {
       childList: true, subtree: true, characterData: true,
-      attributes: true, attributeFilter: ["open", "hidden", "class", "style"],
+      attributes: true, attributeFilter: ["open", "hidden", "class", "style", "id", "data-ad-slot", "data-ad-client", "data-ad-unit", "data-google-query-id", "aria-label"],
     });
+    observedRoots.add(root);
+  }
+  function observeShadowRoots(root) {
+    if (!root || root.nodeType === 3 || root.nodeType === 8) return;
+    if (root.nodeType === 1 && root.hasAttribute("data-tf")) return;
+    if (root.shadowRoot) { observeRoot(root.shadowRoot); observeShadowRoots(root.shadowRoot); }
+    for (const child of root.children || []) observeShadowRoots(child);
   }
   function stopObserver() {
     if (observer) observer.disconnect();
     observer = null;
+    observedRoots = new WeakSet();
     if (observerTimer) clearTimeout(observerTimer);
     observerTimer = null;
   }
@@ -173,8 +209,15 @@
     const mode = opts.mode || settings.displayMode || "replace";
     if (state.status === "translated" && state.mode !== mode) restorePage();
     state.mode = mode;
+    hideAds();
     const units = collectUnits(settings);
     if (!units.length) {
+      if (Exclusions?.hasHiddenAds()) {
+        state.status = "translated";
+        startObserver();
+        getUi().showBadge("広告を非表示にしました。「原文に戻す」で復元できます", "done", 3500);
+        return;
+      }
       if (state.status !== "translated") getUi().showBadge("翻訳する文が見つかりません", "info", 2500);
       return;
     }
@@ -212,9 +255,9 @@
     };
 
     await pool(batches, concurrency, async (batch) => {
-      if (cancelled || fatal) return;
+      if (cancelled || fatal || state.sessionId !== sessionId) return;
       const r = await requestTranslation(batch.map((u) => ({ id: u.id, text: u.text })), sessionId);
-      if (cancelled) return;
+      if (cancelled || state.sessionId !== sessionId) return;
       if (!r.ok) {
         noteFailure(r);
         retry.push(...batch);
@@ -230,17 +273,18 @@
     });
 
     // 失敗・欠落したものを単体で再試行（キャッシュを避けて再生成し、復元に失敗しても緩く適用する）
-    if (!cancelled && !fatal && retry.length) {
+    if (!cancelled && !fatal && retry.length && state.sessionId === sessionId) {
       await pool(retry.slice(0, RETRY_LIMIT), Math.min(4, concurrency), async (u) => {
-        if (cancelled) return;
+        if (cancelled || state.sessionId !== sessionId) return;
         const r = await requestTranslation([{ id: u.id, text: u.text }], sessionId, true);
-        if (cancelled) return;
+        if (cancelled || state.sessionId !== sessionId) return;
         if (!r.ok) { noteFailure(r); return; }
         addUsage(r);
         const t = r.results && r.results[u.id];
         if (t != null) page.applyTranslation(u, t, { allowLoose: true });
       });
     }
+    if (state.sessionId !== sessionId) return;
     stopKeepAlive();
     state.sessionId = null;
     page.releasePending();
@@ -248,11 +292,12 @@
   }
 
   function finishRun({ fatal, wasTranslated, quiet }) {
+    hideAds();
     if (fatal) {
       state.error = fatal;
-      state.status = page.hasChanges() ? "translated" : "idle";
+      state.status = hasPageChanges() ? "translated" : "idle";
       getUi().showBadge(fatal, "error", 8000);
-    } else if (cancelled && !wasTranslated && !page.hasChanges()) {
+    } else if (cancelled && !wasTranslated && !hasPageChanges()) {
       state.status = "idle";
       getUi().showBadge("中止しました", "info", 2000);
     } else {
@@ -274,9 +319,11 @@
 
   function restorePage() {
     cancelSession();
+    state.sessionId = null;
     stopObserver();
     stopKeepAlive();
     page.restore();
+    Exclusions?.restoreAds();
     state.status = "idle";
     state.progress = { done: 0, total: 0 };
     state.incrementalRuns = 0;
@@ -315,6 +362,7 @@
     errorMessage,
     keepAliveMs: KEEPALIVE_MS,
   });
+  imageTranslator = ImageTranslator.create({ getUi, send, loadSettings, addUsage, costText, newSessionId, errorMessage, keepAliveMs: KEEPALIVE_MS });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !changes.settings || !state.settings) return;
@@ -359,6 +407,10 @@
         return false;
       case "tf:translateSelection":
         selection.translate();
+        sendResponse({ ok: true });
+        return false;
+      case "tf:translateImage":
+        imageTranslator.translate(msg.srcUrl);
         sendResponse({ ok: true });
         return false;
       default:

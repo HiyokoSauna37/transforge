@@ -1,4 +1,9 @@
 body{width:360px;min-height:200px}
+.youtube-card h2{font-size:1.1rem;margin:6px 0 10px}
+.youtube-card .row .lbl{width:76px;flex:none}
+.youtube-card .youtube-hint{font-size:.7rem;line-height:1.7}
+#subtitleStatus{font-size:.75rem;line-height:1.6}
+.youtube-card .btnrow{margin-top:12px}
 .wrap{padding:16px 20px 14px}
 .mast{gap:10px;margin-bottom:14px}
 .mast .mark{width:34px;height:34px;border-radius:11px;box-shadow:none}

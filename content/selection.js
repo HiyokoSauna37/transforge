@@ -9,6 +9,16 @@
   const EMPTY_RECT = { left: 40, right: 40, top: 40, bottom: 40 };
   const normalizeSelection = (text) =>
     text.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n\n");
+  // 保持する会話にも上限を設ける。background 側でも同じ上限を独立に検証する。
+  function recentHistory(history) {
+    let remaining = 12000;
+    const recent = [];
+    for (const item of history.slice(-8).reverse()) {
+      const content = item.content.slice(0, Math.min(item.role === "user" ? 1000 : 4000, remaining));
+      if (content) { recent.unshift({ role: item.role, content }); remaining -= content.length; }
+    }
+    return recent;
+  }
 
   function create({ getUi, peekUi, getSettings, loadSettings, send, requestTranslation, addUsage, costText, newSessionId, errorMessage, keepAliveMs }) {
     let selectionSnapshot = null;
@@ -18,6 +28,8 @@
     let requestId = 0;
     let toolbarActive = false;
     let positionFrame = 0;
+    let busy = false;
+    let panelModel = null;
 
     function visibleRect(range) {
       try {
@@ -74,39 +86,68 @@
       requestId++;
       if (sessionId) send({ type: "cancel", sessionId }).catch(() => {});
       sessionId = null;
+      busy = false;
     }
 
     function openQuestionComposer() {
       const captured = snapshotSelection() || selectionSnapshot;
       if (!captured?.text) return;
+      cancel();
       toolbarActive = false;
+      explanationSnapshot = null;
+      panelModel = getSettings()?.model || null;
       questionSnapshot = captured;
       const ui = getUi();
       ui.hideSelButton();
       ui.openQuestionPanel(captured.rect || EMPTY_RECT, captured.text);
+      const currentRequest = requestId;
+      loadSettings().then((settings) => {
+        if (currentRequest !== requestId || !ui.panelOpen) return;
+        panelModel = settings.model;
+        ui.setPanelModels(settings.models, panelModel);
+      }).catch(() => {});
     }
 
-    async function run(mode, { detail = "brief", reuse = false, question = "", captured = null } = {}) {
+    function openFollowupComposer() {
+      if (busy || !explanationSnapshot?.history?.length) return;
+      questionSnapshot = { ...explanationSnapshot, continuation: true };
+      getUi().openFollowupQuestion();
+    }
+
+    async function run(mode, { detail = "brief", reuse = false, continuation = false, question = "", captured = null } = {}) {
       const selected = reuse ? explanationSnapshot : (captured || snapshotSelection() || selectionSnapshot);
       if (!selected?.text) return;
       toolbarActive = false;
       cancel();
+      busy = true;
       const currentRequest = requestId;
+      const history = reuse ? (selected.requestHistory || []) : continuation ? (selected.history || []) : [];
       const ui = getUi();
       ui.hideSelButton();
       ui.openPanel(selected.rect || EMPTY_RECT, selected.text, { mode, question });
 
+      const showError = (message) => {
+        ui.setPanelMessage(message);
+        // 質問の失敗は同じ文面・同じ会話から再送できるようにする。
+        if (mode === "explain" && question && questionSnapshot) ui.openFollowupQuestion(question);
+      };
+
       try {
         const settings = await loadSettings();
         if (currentRequest !== requestId || !ui.panelOpen) return;
-        if (!settings.hasKey) { ui.setPanelMessage("APIキーが未設定です。拡張の設定画面で登録してください。"); return; }
-        if (mode === "explain" && settings.explanationEnabled === false) { ui.setPanelMessage("解説機能は設定で無効になっています。"); return; }
-        if (mode === "explain" && selected.text.length > 6000) { ui.setPanelMessage("選択範囲を6,000文字以内にしてください。"); return; }
+        if (mode === "explain") {
+          if (!settings.models?.some((model) => model.id === panelModel)) panelModel = settings.model;
+          ui.setPanelModels(settings.models, panelModel);
+        }
+        const requestModel = panelModel;
+        if (!settings.hasKey) { showError("APIキーが未設定です。拡張の設定画面で登録してください。"); return; }
+        if (mode === "explain" && settings.explanationEnabled === false) { showError("解説機能は設定で無効になっています。"); return; }
+        if (mode === "explain" && selected.text.length > 6000) { showError("選択範囲を6,000文字以内にしてください。"); return; }
 
         let context = null;
         if (mode === "explain") {
-          context = reuse ? selected.context : Context.collect(selected.text, selected.range, question);
-          explanationSnapshot = { ...selected, context, question };
+          context = (reuse || continuation) && selected.context ? selected.context : Context.collect(selected.text, selected.range, question);
+          if (question) questionSnapshot = { ...selected, context, history, continuation: true };
           ui.setPanelSources(context);
         } else explanationSnapshot = null;
 
@@ -116,7 +157,7 @@
         let response;
         try {
           response = mode === "explain"
-            ? await send({ type: "explain", sessionId: requestSessionId, selection: selected.text, context, detail, question })
+            ? await send({ type: "explain", sessionId: requestSessionId, selection: selected.text, context, detail, question, history, model: requestModel })
             : await requestTranslation([{ id: 0, text: Seg.esc(normalizeSelection(selected.text)) }], requestSessionId);
         } finally {
           clearInterval(keepAlive);
@@ -125,22 +166,36 @@
 
         if (response?.ok) addUsage(response);
         if (currentRequest !== requestId || !ui.panelOpen) return;
-        if (!response?.ok) { ui.setPanelMessage(`エラー: ${response?.error || "応答なし"}`); return; }
+        if (!response?.ok) { showError(`エラー: ${response?.error || "応答なし"}`); return; }
         const text = mode === "explain" ? response.text : response.results?.[0];
+        if (mode === "explain" && typeof text === "string" && text.trim()) {
+          explanationSnapshot = { ...selected, context, question, requestHistory: history,
+            history: recentHistory([...history, ...(question ? [{ role: "user", content: question }] : []), { role: "assistant", content: text }]) };
+          questionSnapshot = null;
+        }
         const cost = response.usage ? costText(response.usage.costUsd || 0) : response.cached ? "cache" : "";
-        ui.setPanelResult(text != null ? (mode === "explain" ? text : Seg.unesc(Seg.stripMarkers(text))) : "結果を取得できませんでした", cost);
+        ui.setPanelResult(text != null ? (mode === "explain" ? text : Seg.unesc(Seg.stripMarkers(text))) : "結果を取得できませんでした", cost, { canFollowup: mode === "explain" && !!text });
       } catch (error) {
-        if (currentRequest === requestId && ui.panelOpen) ui.setPanelMessage(`エラー: ${errorMessage(error)}`);
+        if (currentRequest === requestId && ui.panelOpen) showError(`エラー: ${errorMessage(error)}`);
+      } finally {
+        if (currentRequest === requestId) busy = false;
       }
     }
 
     const handlers = {
       onTranslateSelection: () => run("translate"),
-      onExplainSelection: () => run("explain"),
+      onExplainSelection: () => { panelModel = null; run("explain"); },
       onAskSelection: openQuestionComposer,
-      onAskQuestion: (question) => run("explain", { question, captured: questionSnapshot }),
+      onFollowupQuestion: openFollowupComposer,
+      onPanelModelChange: (model) => {
+        if (getSettings()?.models?.some((entry) => entry.id === model)) panelModel = model;
+      },
+      onAskQuestion: (question) => {
+        if (busy || !question.trim() || !questionSnapshot) return;
+        run("explain", { question: question.trim(), captured: questionSnapshot, continuation: !!questionSnapshot.continuation });
+      },
       onExplainDetail: (detail) => run("explain", { detail, reuse: true, question: explanationSnapshot?.question || "" }),
-      onPanelClose: () => { cancel(); questionSnapshot = null; },
+      onPanelClose: () => { cancel(); questionSnapshot = null; explanationSnapshot = null; panelModel = null; },
     };
 
     const fromUi = (event) => !!peekUi()?.ownsEvent(event);

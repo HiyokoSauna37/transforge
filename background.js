@@ -1,16 +1,20 @@
 // Yomeru service worker: Claude API 呼び出し・再試行・キャッシュ・使用量・コンテンツスクリプト注入
-import { estimateCostUsd } from "./shared/models.js";
+import { MODELS, estimateCostUsd } from "./shared/models.js";
 import { buildRequest, extractText, usageOf, describeHttpError, checkStop } from "./shared/api.js";
 import { buildSystemPrompt, buildUserMessage, parseSegments } from "./shared/prompt.js";
 import { cacheGetMany, cacheSetMany, cacheClear, cacheCount, cachePrune, sha256 } from "./shared/cache.js";
 import { getSettings, saveSettings, addUsage, resetUsage } from "./shared/settings.js";
 import { EXPLAIN_VERSION, normalizeExplanation, buildExplanationSystem, buildExplanationMessage } from "./shared/explain.js";
+import { loadYouTubeCaptions } from "./shared/youtube.js";
+import { IMAGE_VERSION, normalizeImageRequest, imageSenderAllowed, buildImageSystem, buildImageMessage, parseImageResult, fetchRemoteImage } from "./shared/image.js";
+import { SUBTITLES_VERSION, normalizeSubtitles, subtitleSenderAllowed, subtitleVideoUrlAllowed, buildSubtitleSystem, buildSubtitleMessage, parseSubtitleResult } from "./shared/subtitles.js";
 
 // インストール前から開いていたタブへの注入順も manifest の定義を使う。
 const { js: CONTENT_JS, css: CONTENT_CSS } = chrome.runtime.getManifest().content_scripts[0];
 const MENU_PAGE = "tf-page";
 const MENU_SELECTION = "tf-selection";
 const MENU_EXPLAIN = "tf-explain-selection";
+const MENU_IMAGE = "tf-image";
 const MAX_RETRY_AFTER_MS = 30000;
 
 const inflight = new Map(); // sessionId -> Set<AbortController>
@@ -20,12 +24,17 @@ chrome.runtime.onInstalled.addListener(async () => {
   await chrome.contextMenus.removeAll();
   chrome.contextMenus.create({ id: MENU_PAGE, title: "このページを Yomeru で翻訳", contexts: ["all"] });
   chrome.contextMenus.create({ id: MENU_SELECTION, title: "選択範囲を Claude で翻訳", contexts: ["selection"] });
+  chrome.contextMenus.create({ id: MENU_IMAGE, title: "画像を翻訳", contexts: ["image"] });
   const s = await getSettings();
   chrome.contextMenus.create({ id: MENU_EXPLAIN, title: "選択範囲を Yomeru で解説", contexts: ["selection"], visible: s.explanationEnabled !== false });
   cachePrune();
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === MENU_IMAGE) {
+    if (tab?.id && info.srcUrl && await ensureContent(tab.id)) sendToTab(tab.id, { type: "tf:translateImage", srcUrl: info.srcUrl });
+    return;
+  }
   const type = {
     [MENU_PAGE]: "tf:translate",
     [MENU_SELECTION]: "tf:translateSelection",
@@ -77,7 +86,7 @@ const FORBIDDEN = Promise.resolve({ ok: false, error: "forbidden" });
 // apiKey を外に出さない（content script / popup 向け）
 function publicSettings(s) {
   const { apiKey, ...rest } = s;
-  return { ...rest, hasKey: !!apiKey };
+  return { ...rest, hasKey: !!apiKey, models: MODELS.map(({ id, label }) => ({ id, label })) };
 }
 
 function handle(msg, sender) {
@@ -108,6 +117,14 @@ function handle(msg, sender) {
       return testKey(msg);
     case "translate":
       return translate(msg);
+    case "fetchImage":
+      return imageSenderAllowed(sender) ? fetchImage(msg) : FORBIDDEN;
+    case "translateImage":
+      return imageSenderAllowed(sender) ? translateImage(msg) : FORBIDDEN;
+    case "getYouTubeCaptions":
+      return loadYouTubeCaptions(sender, msg.videoId);
+    case "translateSubtitles":
+      return subtitleSenderAllowed(sender) ? translateSubtitles(msg, sender) : FORBIDDEN;
     case "explain":
       return explain(msg);
     case "cancel":
@@ -204,36 +221,176 @@ async function translate(msg) {
   return { ok: true, results, usage, cached, model: s.model };
 }
 
-// ---------- 選択範囲の解説 ----------
-async function explain(msg) {
-  const s = await getSettings();
-  if (s.explanationEnabled === false) throw fatalError("解説機能は設定で無効になっています");
-  if (!s.apiKey) throw fatalError("APIキーが未設定です（拡張の設定画面で登録してください）");
-  const input = normalizeExplanation(msg);
-  const system = buildExplanationSystem(s, input.detail, input.question);
-  const message = buildExplanationMessage(input);
-  // 文脈・説明の詳しさ・プロンプトが変われば解説も変わる。
-  const key = await sha256(JSON.stringify([EXPLAIN_VERSION, s.model, s.effort, system, message]));
-  if (s.cacheEnabled) {
-    const hits = await cacheGetMany([key]);
-    if (hits.has(key)) return { ok: true, text: hits.get(key), cached: 1, usage: null, model: s.model };
+// ---------- YouTube 字幕 ----------
+async function translateSubtitles(msg, sender) {
+  const input = normalizeSubtitles(msg);
+  if (typeof msg.sessionId !== "string" || !msg.sessionId || msg.sessionId.length > 160) throw fatalError("字幕のセッションIDが不正です");
+  async function checkCurrentVideo() {
+    const current = await chrome.tabs.get(sender.tab.id);
+    if (!subtitleVideoUrlAllowed(current.url, input.videoId)) throw fatalError("動画が切り替わりました。もう一度開始してください");
   }
-  const req = buildRequest(s, system, message, { maxTokens: input.detail === "detailed" ? 2800 : 1600 });
+  // 設定/キャッシュ照合中の中止も取りこぼさないよう、最初の await より前に登録する。
   const ctrl = new AbortController();
   track(msg.sessionId, ctrl);
-  let resp;
-  try { resp = await fetchWithRetry(req, ctrl.signal); }
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; ctrl.abort(); }, 60000);
+  try {
+    await checkCurrentVideo();
+    const s = await getSettings();
+    if (ctrl.signal.aborted) throw abortError();
+    if (!s.apiKey) throw fatalError("APIキーが未設定です（拡張の設定画面で登録してください）");
+    const system = buildSubtitleSystem(s, input);
+    const message = buildSubtitleMessage(input);
+    // 同じ短文でも動画・周辺の発話・翻訳先が変われば訳は変わる。バッチ単位で保存する。
+    const key = await sha256(JSON.stringify(["subtitles", SUBTITLES_VERSION, s.model, s.effort, system, message]));
+    if (s.cacheEnabled) {
+      const hits = await cacheGetMany([key]);
+      if (ctrl.signal.aborted) throw abortError();
+      if (hits.has(key)) {
+        await checkCurrentVideo();
+        try {
+          const results = parseSubtitleResult(hits.get(key), input.cues);
+          return { ok: true, results, cached: input.cues.length, usage: null, model: s.model };
+        } catch { /* 古い/壊れたキャッシュは使わず取得し直す */ }
+      }
+    }
+    await checkCurrentVideo();
+    if (ctrl.signal.aborted) throw abortError();
+    const req = buildRequest(s, system, message, { maxTokens: 6000 });
+    const resp = await fetchWithRetry(req, ctrl.signal);
+    if (ctrl.signal.aborted) throw abortError();
+    const u = usageOf(resp);
+    const costUsd = estimateCostUsd(s.model, u);
+    // 出力の欠落や途中終了があっても、実際に発生したAPI使用量を記録する。
+    await addUsage({ input: u.input + u.cacheRead + u.cacheWrite, output: u.output, costUsd });
+    const stop = checkStop(resp);
+    if (!stop.ok) throw fatalError(stop.message);
+    if (stop.truncated) throw new Error("字幕の応答が途中で切れました。もう一度お試しください");
+    const results = parseSubtitleResult(extractText(resp), input.cues);
+    if (ctrl.signal.aborted) throw abortError();
+    if (s.cacheEnabled) {
+      const serialized = JSON.stringify({ cues: input.cues.map((cue) => ({ id: cue.id, text: results[cue.id] })) });
+      await cacheSetMany([{ k: key, t: serialized }]);
+    }
+    await checkCurrentVideo();
+    if (ctrl.signal.aborted) throw abortError();
+    return { ok: true, results, usage: { ...u, costUsd }, cached: 0, model: s.model };
+  } catch (error) {
+    if (timedOut) throw new Error("字幕の翻訳がタイムアウトしました。もう一度お試しください");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    untrack(msg.sessionId, ctrl);
+  }
+}
+
+// ---------- 画像翻訳 ----------
+async function fetchImage(msg) {
+  if (msg.sessionId != null && (typeof msg.sessionId !== "string" || !msg.sessionId || msg.sessionId.length > 160)) throw fatalError("画像のセッションIDが不正です");
+  const ctrl = new AbortController();
+  track(msg.sessionId, ctrl);
+  try { return { ok: true, image: await fetchRemoteImage(msg.url, ctrl.signal) }; }
   finally { untrack(msg.sessionId, ctrl); }
-  const stop = checkStop(resp);
-  if (!stop.ok) throw fatalError(stop.message);
-  let text = extractText(resp).trim();
-  if (!text) throw new Error("解説を取得できませんでした");
-  if (s.cacheEnabled && !stop.truncated) await cacheSetMany([{ k: key, t: text }]);
-  if (stop.truncated) text += "\n\n（解説が長いため、ここまで表示しています）";
-  const u = usageOf(resp);
-  const costUsd = estimateCostUsd(s.model, u);
-  await addUsage({ input: u.input + u.cacheRead + u.cacheWrite, output: u.output, costUsd });
-  return { ok: true, text, usage: { ...u, costUsd }, cached: 0, model: s.model };
+}
+
+async function translateImage(msg) {
+  if (typeof msg.sessionId !== "string" || !msg.sessionId || msg.sessionId.length > 160) throw fatalError("画像のセッションIDが不正です");
+  // 設定・画像ハッシュ・キャッシュの処理中でも中止を取りこぼさない。
+  const ctrl = new AbortController();
+  track(msg.sessionId, ctrl);
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; ctrl.abort(); }, 60000);
+  try {
+    const input = normalizeImageRequest(msg);
+    const s = await getSettings();
+    if (ctrl.signal.aborted) throw abortError();
+    if (!s.apiKey) throw fatalError("APIキーが未設定です（拡張の設定画面で登録してください）");
+    const system = buildImageSystem(s);
+    const message = buildImageMessage(input, s);
+    const imageHash = await sha256(input.image.data);
+    const key = await sha256(JSON.stringify(["image", IMAGE_VERSION, imageHash, input.image.mediaType, s.model, s.effort, system, message]));
+    if (s.cacheEnabled) {
+      const hits = await cacheGetMany([key]);
+      if (ctrl.signal.aborted) throw abortError();
+      if (hits.has(key)) {
+        try { return { ok: true, ...parseImageResult(hits.get(key)), usage: null, cached: 1, model: s.model }; }
+        catch { /* 壊れたキャッシュは使わず翻訳し直す。画像そのものは保存しない。 */ }
+      }
+    }
+    if (ctrl.signal.aborted) throw abortError();
+    const req = buildRequest(s, system, message, { maxTokens: 8000 });
+    req.body.messages[0].content = [
+      { type: "image", source: { type: "base64", media_type: input.image.mediaType, data: input.image.data } },
+      { type: "text", text: message },
+    ];
+    const response = await fetchWithRetry(req, ctrl.signal);
+    const u = usageOf(response);
+    const costUsd = estimateCostUsd(s.model, u);
+    // APIが返した使用量は、不正JSON・拒否・途中終了・直後の中止でも計上する。
+    await addUsage({ input: u.input + u.cacheRead + u.cacheWrite, output: u.output, costUsd });
+    if (ctrl.signal.aborted) throw abortError();
+    const stop = checkStop(response);
+    if (!stop.ok) throw fatalError(stop.message);
+    if (stop.truncated) throw new Error("画像翻訳の応答が途中で切れました。文字の少ない範囲に分けてお試しください。");
+    const result = parseImageResult(extractText(response));
+    if (s.cacheEnabled) await cacheSetMany([{ k: key, t: JSON.stringify({ original: result.original, translation: result.text }) }]);
+    if (ctrl.signal.aborted) throw abortError();
+    return { ok: true, ...result, usage: { ...u, costUsd }, cached: 0, model: s.model };
+  } catch (error) {
+    if (timedOut) throw new Error("画像の翻訳がタイムアウトしました。もう一度お試しください。");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    untrack(msg.sessionId, ctrl);
+  }
+}
+
+// ---------- 選択範囲の解説 ----------
+async function explain(msg) {
+  if (msg.sessionId != null && (typeof msg.sessionId !== "string" || !msg.sessionId || msg.sessionId.length > 160)) throw fatalError("解説のセッションIDが不正です");
+  const ctrl = new AbortController();
+  track(msg.sessionId, ctrl);
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; ctrl.abort(); }, 60000);
+  try {
+    if (msg.model != null && !MODELS.some(({ id }) => id === msg.model)) throw fatalError("選択した解説モデルは使用できません");
+    const input = normalizeExplanation(msg);
+    const saved = await getSettings();
+    if (ctrl.signal.aborted) throw abortError();
+    const s = msg.model == null ? saved : { ...saved, model: msg.model };
+    if (s.explanationEnabled === false) throw fatalError("解説機能は設定で無効になっています");
+    if (!s.apiKey) throw fatalError("APIキーが未設定です（拡張の設定画面で登録してください）");
+    const system = buildExplanationSystem(s, input.detail, input.question);
+    const message = buildExplanationMessage(input);
+    // 文脈・説明の詳しさ・プロンプトが変われば解説も変わる。
+    const key = await sha256(JSON.stringify([EXPLAIN_VERSION, s.model, s.effort, system, message]));
+    if (s.cacheEnabled) {
+      const hits = await cacheGetMany([key]);
+      if (ctrl.signal.aborted) throw abortError();
+      if (hits.has(key)) return { ok: true, text: hits.get(key), cached: 1, usage: null, model: s.model };
+    }
+    if (ctrl.signal.aborted) throw abortError();
+    const req = buildRequest(s, system, message, { maxTokens: input.detail === "detailed" ? 2800 : 1600 });
+    const resp = await fetchWithRetry(req, ctrl.signal);
+    const u = usageOf(resp);
+    const costUsd = estimateCostUsd(s.model, u);
+    await addUsage({ input: u.input + u.cacheRead + u.cacheWrite, output: u.output, costUsd });
+    if (ctrl.signal.aborted) throw abortError();
+    const stop = checkStop(resp);
+    if (!stop.ok) throw fatalError(stop.message);
+    let text = extractText(resp).trim();
+    if (!text) throw new Error("解説を取得できませんでした");
+    if (s.cacheEnabled && !stop.truncated) await cacheSetMany([{ k: key, t: text }]);
+    if (ctrl.signal.aborted) throw abortError();
+    if (stop.truncated) text += "\n\n（解説が長いため、ここまで表示しています）";
+    return { ok: true, text, usage: { ...u, costUsd }, cached: 0, model: s.model };
+  } catch (error) {
+    if (timedOut) throw new Error("解説の取得がタイムアウトしました。もう一度お試しください。");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    untrack(msg.sessionId, ctrl);
+  }
 }
 
 // ---------- HTTP ----------

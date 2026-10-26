@@ -26,6 +26,7 @@ export async function launch({ headless = true, prefix = "tf-", viewport = null 
   const ctx = await chromium.launchPersistentContext(userDataDir, {
     headless,
     channel: "chromium", // headless shell では拡張を読めない
+    ...(process.env.PW_EXECUTABLE_PATH ? { executablePath: process.env.PW_EXECUTABLE_PATH } : {}),
     viewport,
     args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
   });
