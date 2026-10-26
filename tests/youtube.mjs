@@ -89,16 +89,20 @@ try {
   let popup = await h.ctx.newPage();
   await popup.goto(`chrome-extension://${h.extId}/popup/popup.html?tab=${tabId}`);
   await popup.locator("#youtube").waitFor({ state: "visible" });
-  await popup.selectOption("#subtitleLang", "日本語");
-  await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ type: "getSettings" })).settings.subtitleTargetLang === "日本語");
+  assert.equal(await popup.inputValue("#subtitleLang"), "日本語");
+  assert.equal(await popup.inputValue("#subtitleModel"), "claude-haiku-5-5");
+  assert.equal(await popup.inputValue("#model"), "claude-sonnet-5-5");
+  await popup.selectOption("#model", "claude-opus-5-5");
+  await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ type: "getSettings" })).settings.model === "claude-opus-5-5");
+  assert.equal(await popup.inputValue("#subtitleModel"), "claude-haiku-5-5");
   await popup.reload();
   await popup.locator("#youtube").waitFor({ state: "visible" });
   assert.equal(await popup.inputValue("#subtitleLang"), "日本語");
-  await popup.selectOption("#subtitleLang", "English");
+  assert.equal(await popup.inputValue("#subtitleModel"), "claude-haiku-5-5");
   await popup.selectOption("#subtitleMode", "bilingual");
   await popup.waitForFunction(async () => {
     const settings = (await chrome.runtime.sendMessage({ type: "getSettings" })).settings;
-    return settings.subtitleTargetLang === "English" && settings.subtitleMode === "bilingual" && settings.targetLang === "日本語";
+    return settings.subtitleTargetLang === "日本語" && settings.subtitleMode === "bilingual" && settings.targetLang === "日本語";
   });
   assert.equal(requests.length, 0);
   await popup.locator("#subtitleStart").click();
@@ -111,7 +115,8 @@ try {
   assert.equal(initial.sourceLang, "ja");
   assert.equal(captionFetches, 1);
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].payload.target_language, "English");
+  assert.equal(requests[0].payload.target_language, "日本語");
+  assert.equal(requests[0].request.model, "claude-haiku-5-5");
   assert.equal(requests[0].payload.context_after.length, 3);
   assert.match(requests[0].request.system[0].text, /untrusted source material/);
   await waitLine(0);
@@ -119,7 +124,7 @@ try {
   assert.match(await page.locator("#tf-youtube-subtitles .original").textContent(), /元の字幕 0/);
   assert.equal(await nativeVisibility(), "hidden");
   check("no automatic API traffic; explicit start extracts MAIN-world captions, translates only the look-ahead batch and overlays synchronized bilingual text");
-  check("popup detects YouTube, persists subtitle language independently, starts translation and shows progress with language locked during playback");
+  check("popup defaults and API requests use Japanese/Haiku; changing the page model leaves the subtitle model independent");
 
   await message({ type: "tf:youtubeMode", mode: "replace" });
   assert.equal(await page.locator("#tf-youtube-subtitles .original").isVisible(), false);
@@ -137,11 +142,13 @@ try {
   await page.evaluate(() => document.getElementById("movie_player").classList.add("ad-showing"));
   await setTime(95);
   await page.waitForFunction(() => document.getElementById("tf-youtube-subtitles").hidden);
+  assert.equal(await page.locator("#tf-youtube-subtitles").evaluate((host) => getComputedStyle(host).display), "none");
   assert.equal(await nativeVisibility(), "visible");
   await wait(300);
   assert.equal(requests.length, 1);
   await page.evaluate(() => document.getElementById("movie_player").classList.remove("ad-showing"));
   await waitLine(19);
+  assert.equal(await page.locator("#tf-youtube-subtitles .translated").isVisible(), true);
   assert.equal(requests.length, 2);
   assert.equal(requests[1].payload.cues[0].id, 18);
   assert.equal(requests[1].payload.context_before.length, 3);
@@ -161,13 +168,48 @@ try {
   assert.equal((await state()).status, "idle");
   assert.equal(await page.locator("#tf-youtube-subtitles").count(), 0);
   assert.equal(await nativeVisibility(), "visible");
-  await message({ type: "tf:youtubeStart", targetLang: "English", mode: "replace" });
+  await message({ type: "tf:youtubeStart", mode: "replace" });
   const cached = await waitState((s) => s.done === 9, "cached restart");
   assert.equal(cached.usage.cached, 9);
   assert.equal(cached.usage.requests, 0);
   assert.equal(requests.length, 2);
   await waitLine(0);
   check("popup stop removes extension subtitles and restores native captions; restarting uses persistent cache without another model call");
+
+  await message({ type: "tf:youtubeStop" });
+  popup = await h.ctx.newPage();
+  await popup.goto(`chrome-extension://${h.extId}/popup/popup.html?tab=${tabId}`);
+  await popup.locator("#youtube").waitFor({ state: "visible" });
+  await popup.selectOption("#subtitleModel", "claude-sonnet-5-5");
+  await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ type: "getSettings" })).settings.subtitleModel === "claude-sonnet-5-5");
+  assert.equal(await popup.inputValue("#model"), "claude-opus-5-5");
+  const independentSettings = await popup.evaluate(async () => (await chrome.runtime.sendMessage({ type: "getSettings" })).settings);
+  assert.equal(independentSettings.model, "claude-opus-5-5");
+  await popup.locator("#subtitleStart").click();
+  await waitState((s) => s.done === 9, "different-model subtitle batch");
+  assert.equal(requests.length, 3);
+  assert.equal(requests.at(-1).request.model, "claude-sonnet-5-5");
+  assert.equal(requests.at(-1).payload.target_language, "日本語");
+  await popup.locator("#subtitleStop").click();
+  await popup.locator("#subtitleStart").waitFor({ state: "visible" });
+  await popup.selectOption("#subtitleModel", "claude-haiku-5-5");
+  await popup.selectOption("#subtitleLang", "English");
+  await popup.waitForFunction(async () => {
+    const s = (await chrome.runtime.sendMessage({ type: "getSettings" })).settings;
+    return s.subtitleModel === "claude-haiku-5-5" && s.subtitleTargetLang === "English";
+  });
+  await popup.reload();
+  await popup.locator("#youtube").waitFor({ state: "visible" });
+  assert.equal(await popup.inputValue("#subtitleLang"), "English");
+  await popup.selectOption("#subtitleLang", "日本語");
+  await popup.waitForFunction(async () => (await chrome.runtime.sendMessage({ type: "getSettings" })).settings.subtitleTargetLang === "日本語");
+  await popup.locator("#subtitleStart").click();
+  const originalModelCache = await waitState((s) => s.done === 9, "original-model subtitle cache");
+  assert.equal(originalModelCache.usage.cached, 9);
+  assert.equal(requests.length, 3);
+  await popup.close();
+  await page.bringToFront();
+  check("subtitle model changes leave the page model untouched, reach the API and use separate caches; explicit English remains selectable");
 
   // ページ翻訳のMutationObserverに字幕領域が巻き込まれないことも確認する。
   await page.addScriptTag({ path: join(EXT, "content/segmenter.js") });

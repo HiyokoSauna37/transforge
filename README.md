@@ -150,10 +150,10 @@ Web ページの画像を右クリックし、**画像を翻訳** を選びま�
 ### YouTube の字幕を、自然な言葉に
 
 1. デスクトップ版 YouTube で字幕付きの通常動画を開く
-2. Yomeru アイコンを押し、**YouTube** 欄で字幕の言語と表示方法を選ぶ（既定は English・原文と併記）
+2. Yomeru アイコンを押し、**YouTube** 欄で字幕の言語と表示方法を選ぶ（既定は日本語・Haiku 5.5・原文と併記）
 3. **字幕を翻訳** を押す
 
-字幕は前後の発話を参照し、意味を保った自然な英語または日本語に翻訳します。もともと英語の字幕は、不自然な表現だけを整えます。API キーとモデルは既存の設定を共有します。ページ翻訳の翻訳先とは別に字幕の言語を選べます。
+字幕は前後の発話を参照し、意味を保った自然な日本語に翻訳します。英語も選べ、その場合は英語字幕の不自然な表現を整える用途にも使えます。API キーは既存の設定を共有し、字幕の言語・モデルはページ翻訳とは別に保存します。字幕の既定モデルは Haiku 5.5 です。
 
 再生位置の約40秒先までを必要に応じて翻訳し、巻き戻しでは取得済みの訳文を再利用します。開始直後や先の位置へシークした直後は、訳文が届くまで原文を表示します。初めから動画全体を一括翻訳しないため、停止すれば新しい API リクエストも止まります。
 
@@ -284,7 +284,12 @@ API ベース URL を変更した場合、リクエストは指定した URL に
 
 ```text
 manifest.json          MV3
-background.js          service worker: API 呼び出し・再試行・キャッシュ・使用量・注入
+background.js          service worker: ブラウザイベント・メッセージ受付・スクリプト注入
+background/requests.js API 通信・再試行・セッション単位の中止とタイムアウト
+background/translations.js ページ翻訳と接続テスト
+background/subtitles.js 字幕翻訳、専用モデル・文脈・キャッシュ
+background/images.js   画像取得・画像翻訳
+background/explanation.js 解説・続きの質問
 content/exclusions.js  広告の判定・抽出除外・非表示と復元
 content/segmenter.js   DOM → セグメント化（マーカー直列化 / 復元 / in-place 適用）。純粋な DOM ロジック
 content/page.js        ページ翻訳の DOM 適用・復元と、翻訳済みノードの状態管理
@@ -294,9 +299,12 @@ content/selection.js   選択範囲の翻訳・解説・質問、スクロール
 content/image.js       画像の取得・縮小・翻訳パネル・中止
 content/content.js     ページ翻訳の進行、MutationObserver による追い翻訳、メッセージ処理
 content/subtitle-timeline.js 字幕の時刻・バッチ・先読み範囲
-content/youtube.js     YouTube 字幕の開始/停止、先読み翻訳、再生同期、表示
+content/youtube.js     YouTube 字幕の開始/停止、先読み翻訳、再生同期
+content/youtube-ui.js  YouTube 字幕の表示、元字幕の表示復元
 content/content.css    対訳モードの訳文スタイルと UI 用フォント
-popup/, options/       ポップアップと設定ページ
+popup/popup.js         ページ翻訳のポップアップ操作
+popup/youtube.js       字幕用の言語・モデル・開始/停止・進行表示
+options/               設定ページ
 shared/                モデル・API・プロンプト・解説・キャッシュ・設定・UI の共通モジュール
 shared/subtitles.js    字幕専用プロンプトと入出力の検証
 shared/youtube.js      YouTube の字幕トラック・文字起こし欄からの取得

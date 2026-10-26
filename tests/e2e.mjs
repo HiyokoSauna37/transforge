@@ -300,7 +300,7 @@ const watchErrors = (p) => {
   await target.close();
 }
 
-// ---------------- settings migration (schema 1 → 2: 旧既定 Opus → Sonnet) ----------------
+// ---------------- settings migration (schema 1 → 3: ページ既定と字幕既定) ----------------
 log("[settings] migration");
 {
   const p = await ctx.newPage();
@@ -310,13 +310,13 @@ log("[settings] migration");
     return (await p.evaluate(() => chrome.runtime.sendMessage({ type: "getSettings" }))).settings;
   };
   const a = await ask({ apiKey: "k", model: "claude-opus-5-5" });
-  check(a.model === "claude-sonnet-5-5" && a.schema === 2, "migration: old default Opus → Sonnet", JSON.stringify(a));
+  check(a.model === "claude-sonnet-5-5" && a.schema === 3, "migration: old default Opus → Sonnet", JSON.stringify(a));
   const b = await ask({ apiKey: "k", model: "claude-haiku-5-5" });
-  check(b.model === "claude-haiku-5-5" && b.schema === 2, "migration: explicit Haiku kept", JSON.stringify(b));
+  check(b.model === "claude-haiku-5-5" && b.schema === 3, "migration: explicit Haiku kept", JSON.stringify(b));
   const c = await ask({ schema: 2, apiKey: "k", model: "claude-opus-5-5" });
   check(c.model === "claude-opus-5-5", "migration: schema 2 Opus untouched", JSON.stringify(c));
   const d = await ask({});
-  check(d.model === "claude-sonnet-5-5" && d.schema === 2, "defaults: Sonnet", JSON.stringify(d));
+  check(d.model === "claude-sonnet-5-5" && d.schema === 3 && d.subtitleTargetLang === "日本語" && d.subtitleModel === "claude-haiku-5-5", "defaults: page Sonnet, subtitles Japanese/Haiku", JSON.stringify(d));
   await p.close();
 }
 

@@ -1,5 +1,5 @@
 // 字幕用の入力・出力検証とプロンプト。DOM / Chrome API に依存しない。
-import { LANG_PRESETS } from "./models.js";
+import { DEFAULTS, LANG_PRESETS } from "./models.js";
 import { parseGlossary } from "./prompt.js";
 
 export const SUBTITLES_VERSION = 1;
@@ -26,7 +26,7 @@ function contextCues(value) {
 export function normalizeSubtitles(msg) {
   if (!msg || typeof msg !== "object") fail("字幕リクエストが不正です");
   if (typeof msg.videoId !== "string" || !/^[\w-]{11}$/.test(msg.videoId)) fail("動画IDが不正です");
-  const targetLang = msg.targetLang == null ? "English" : boundedText(msg.targetLang, 60, "字幕の翻訳先", true);
+  const targetLang = msg.targetLang == null ? DEFAULTS.subtitleTargetLang : boundedText(msg.targetLang, 60, "字幕の翻訳先", true);
   if (!LANG_PRESETS.includes(targetLang)) fail("字幕の翻訳先が未対応です");
   if (!Array.isArray(msg.cues) || !msg.cues.length || msg.cues.length > SUBTITLE_LIMITS.cues) fail("字幕は1〜16件ずつ送信してください");
   const ids = new Set();

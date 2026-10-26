@@ -22,10 +22,15 @@ export function getSettings() {
   return serialize(readSettings);
 }
 
-// 保存済み設定の一度きりの追従。明示的に選んだ値は触らず、旧既定のまま残っているものだけ新既定へ寄せる
+// 保存済み設定の一度きりの追従。以後のユーザー選択はschemaで保護する。
 async function migrate(s) {
   const from = s.schema || 1;
   if (from < 2 && (!s.model || s.model === "claude-opus-5-5")) s.model = DEFAULTS.model;  // 旧既定 Opus → Sonnet
+  if (from < 3) {
+    // 0.2.0では既定のEnglishも設定保存に含まれていたため、日本語へ一度だけ移行する。
+    if (!s.subtitleTargetLang || s.subtitleTargetLang === "English") s.subtitleTargetLang = DEFAULTS.subtitleTargetLang;
+    if (!s.subtitleModel) s.subtitleModel = DEFAULTS.subtitleModel;
+  }
   s.schema = SETTINGS_SCHEMA;
   await chrome.storage.local.set({ [KEY]: s });
 }

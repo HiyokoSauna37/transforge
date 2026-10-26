@@ -15,7 +15,7 @@ export const EFFORTS = [
 
 export const LANG_PRESETS = ["日本語", "English", "한국어", "中文（简体）", "中文（繁體）", "Deutsch", "Français", "Español"];
 
-export const SETTINGS_SCHEMA = 2;   // 2: 既定モデルを Opus → Sonnet に変更(2026-10-24)
+export const SETTINGS_SCHEMA = 3;   // 3: 字幕の既定を日本語・専用Haikuモデルに変更
 
 export const DEFAULTS = {
   schema: SETTINGS_SCHEMA,
@@ -25,7 +25,8 @@ export const DEFAULTS = {
   effort: "low",
   targetLang: "日本語",
   displayMode: "replace",      // "replace" | "bilingual"
-  subtitleTargetLang: "English",
+  subtitleTargetLang: "日本語",
+  subtitleModel: "claude-haiku-5-5",
   subtitleMode: "bilingual",
   customInstructions: "",
   glossary: "",                // 1行1語: "term = 訳語"

@@ -15,19 +15,22 @@ const request = {
 };
 const copy = () => structuredClone(request);
 const input = normalizeSubtitles(request);
-assert.equal(input.targetLang, "English");
+assert.equal(DEFAULTS.subtitleTargetLang, "日本語");
+assert.equal(DEFAULTS.subtitleModel, "claude-haiku-5-5");
+assert.equal(DEFAULTS.model, "claude-sonnet-5-5");
+assert.equal(input.targetLang, "日本語");
 assert.deepEqual(input.cues, request.cues);
-assert.equal(normalizeSubtitles({ ...request, targetLang: "日本語" }).targetLang, "日本語");
-const system = buildSubtitleSystem({ ...DEFAULTS, targetLang: "日本語", customInstructions: "Keep brand names." }, input);
-assert.match(system, /fluent English subtitles/);
-assert.match(system, /already in English/);
+assert.equal(normalizeSubtitles({ ...request, targetLang: "English" }).targetLang, "English");
+const system = buildSubtitleSystem({ ...DEFAULTS, targetLang: "English", customInstructions: "Keep brand names." }, input);
+assert.match(system, /fluent 日本語 subtitles/);
+assert.match(system, /already in 日本語/);
 assert.match(system, /untrusted source material/);
 assert.match(system, /Keep brand names/);
 const body = JSON.parse(buildSubtitleMessage(input));
 assert.deepEqual(body.context_before, request.context.before);
 assert.deepEqual(body.context_after, request.context.after);
 assert.deepEqual(body.cues, request.cues);
-assert.equal(body.target_language, "English");
+assert.equal(body.target_language, "日本語");
 const changedContext = copy();
 changedContext.context.before[0].text = "別の話題です。";
 assert.notEqual(buildSubtitleMessage(normalizeSubtitles(changedContext)), buildSubtitleMessage(input));
@@ -105,6 +108,24 @@ globalThis.chrome = { storage: { local: {
   async set(value) { await new Promise((resolve) => setTimeout(resolve, 1)); stored = structuredClone(value); },
 } } };
 const { getSettings, addUsage, saveSettings, resetUsage } = await import("../shared/settings.js");
+stored = { settings: { schema: 2, model: "claude-opus-5-5", subtitleTargetLang: "English" } };
+let migrated = await getSettings();
+assert.equal(migrated.schema, 3);
+assert.equal(migrated.model, "claude-opus-5-5");
+assert.equal(migrated.subtitleTargetLang, "日本語");
+assert.equal(migrated.subtitleModel, "claude-haiku-5-5");
+stored = { settings: { schema: 2, model: "claude-sonnet-5-5", subtitleTargetLang: "日本語" } };
+migrated = await getSettings();
+assert.equal(migrated.subtitleTargetLang, "日本語");
+assert.equal(migrated.subtitleModel, "claude-haiku-5-5");
+await saveSettings({ subtitleTargetLang: "English", subtitleModel: "claude-opus-5-5" });
+migrated = await getSettings();
+assert.equal(migrated.schema, 3);
+assert.equal(migrated.subtitleTargetLang, "English");
+assert.equal(migrated.subtitleModel, "claude-opus-5-5");
+assert.equal(migrated.model, "claude-sonnet-5-5");
+check("existing subtitle defaults migrate to Japanese/Haiku without changing the page model; subsequent explicit subtitle choices are retained");
+stored = {};
 await Promise.all([
   ...Array.from({ length: 20 }, () => addUsage({ input: 10, output: 4, costUsd: 0.1 })),
   saveSettings({ targetLang: "English" }),
