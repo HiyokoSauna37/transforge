@@ -1,4 +1,4 @@
-// 右クリック画像→取得/縮小→Claude→パネルの経路を、実ブラウザとローカルAPIモックで検証。
+// 右クリック画像→取得/縮小→Claude→Canvas上書きの経路を、実ブラウザとローカルAPIモックで検証。
 import assert from "node:assert/strict";
 import http from "node:http";
 import { readFileSync } from "node:fs";
@@ -32,8 +32,13 @@ const server = http.createServer(async (req, res) => {
   const body = JSON.parse(raw);
   requests.push(body);
   const multimodal = Array.isArray(body.messages[0].content);
+  const imageTask = multimodal ? JSON.parse(body.messages[0].content.find(part => part.type === "text").text) : null;
   const text = multimodal
-    ? responseMode === "invalid" ? "not json" : JSON.stringify({ original: "Hello from Yomeru", translation: "Yomeruからこんにちは" })
+    ? responseMode === "invalid" ? "not json" : responseMode === "empty" ? '{"regions":[]}' : JSON.stringify({ regions: [{
+      original: "Hello from Yomeru", translation: "Yomeruからこんにちは",
+      box: [Math.round(imageTask.image.width * 0.04), Math.round(imageTask.image.height * 0.25), Math.round(imageTask.image.width * 0.72), Math.round(imageTask.image.height * 0.5)],
+      rotation: 0, align: "left", weight: "bold",
+    }] })
     : "ページの選択箇所の解説です。";
   const result = { id: "image-mock", type: "message", role: "assistant", model: body.model,
     content: [{ type: "text", text }], stop_reason: responseMode === "truncated" ? "max_tokens" : "end_turn",
@@ -59,10 +64,15 @@ try {
     const srcUrl = capture ? await pickImage(id) : await page.locator(`#${id}`).getAttribute("src");
     await h.msg(tabId, { type: "tf:translateImage", srcUrl });
   };
-  const waitText = text => page.waitForFunction(text => {
-    const body = document.getElementById("tf-host")?.shadowRoot?.querySelector(".pb");
-    return body && !body.classList.contains("wait") && body.textContent.includes(text);
+  const waitOverlayText = text => page.waitForFunction(text => {
+    const status = document.getElementById("tf-image-host")?.shadowRoot?.querySelector(".status");
+    return status && !status.hidden && status.textContent.includes(text);
   }, text);
+  const waitCanvas = targetPage => (targetPage || page).waitForFunction(() => {
+    const root = document.getElementById("tf-image-host")?.shadowRoot;
+    const canvas = root?.querySelector("canvas.image");
+    return canvas && !canvas.hidden && canvas.width > 1 && !root.querySelector(".frame").hidden;
+  });
   const waitRequests = async count => {
     const deadline = Date.now() + 5000;
     while (requests.length < count && Date.now() < deadline) await page.waitForTimeout(20);
@@ -71,47 +81,58 @@ try {
 
   await pickImage("data-image");
   assert.equal(requests.length, 0);
+  assert.equal(await page.locator("#tf-image-host .frame").isVisible(), false);
   await translate("data-image");
-  await waitText("Yomeruからこんにちは");
+  await waitCanvas();
   assert.equal(requests.length, 1);
   const imagePart = requests[0].messages[0].content.find(part => part.type === "image");
   assert.equal(imagePart.source.media_type, "image/png");
+  assert.deepEqual(imagePart.transformations, { oversized_image: "error" });
+  assert.equal(requests[0].output_config.format.type, "json_schema");
   const encoded = Buffer.from(imagePart.source.data, "base64");
   assert.equal(encoded.readUInt32BE(16), 2048);
   assert.equal(encoded.readUInt32BE(20), 512);
   assert.ok(encoded.length <= 5 * 1024 * 1024);
   const textPart = JSON.parse(requests[0].messages[0].content.find(part => part.type === "text").text);
+  assert.deepEqual(textPart.image, { width: 2048, height: 512 });
   assert.equal(textPart.target_language, "日本語");
   assert.doesNotMatch(textPart.page.url, /private|secret/);
-  assert.equal(await page.locator("#tf-host .panel-title").textContent(), "Yomeru 画像翻訳");
-  assert.equal(await page.locator("#tf-host .model-row").isVisible(), false);
-  assert.equal(await page.locator("#tf-host .followup").isVisible(), false);
-  await page.locator("#tf-host .orig").click();
-  assert.equal(await page.locator("#tf-host .po").textContent(), "Hello from Yomeru");
-  check("right-click alone sends nothing; image translation sends resized image bytes and displays translation plus OCR original");
+  assert.equal(await page.locator("#tf-host .panel").isVisible(), false);
+  assert.deepEqual(await page.locator("#tf-image-host .actions button:not([hidden])").allTextContents(), ["原文", "戻す"]);
+  const paintedPixels = await page.locator("#tf-image-host canvas.image").evaluate(canvas => {
+    const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+    let count = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i]) count++;
+    return count;
+  });
+  assert.ok(paintedPixels > 1000);
+  await page.locator("#tf-image-host .toggle").click();
+  assert.equal(await page.locator("#tf-image-host canvas.image").isVisible(), false);
+  assert.equal(await page.locator("#tf-image-host .toggle").textContent(), "訳文");
+  await page.locator("#tf-image-host .toggle").click();
+  check("right-click alone sends nothing; translation paints bounded text replacements over the image without opening a modal");
 
   await translate("data-image");
-  await waitText("Yomeruからこんにちは");
+  await waitCanvas();
   assert.equal(requests.length, 1);
-  assert.equal(await page.locator("#tf-host .cost").textContent(), "cache");
   await h.setSettings({ ...settings, targetLang: "English" });
   await translate("data-image");
-  await waitText("Yomeruからこんにちは");
+  await waitCanvas();
   assert.equal(requests.length, 2);
   assert.match(requests.at(-1).system[0].text, /fluent English/);
   check("image results are cached and changing target language uses a separate translation");
 
   await h.setSettings({ ...settings, cacheEnabled: false });
   // snapshot がなくても data/blob の URL から読み取れる。
-  await page.locator("#tf-host .x").click();
+  await page.locator("#tf-image-host .close").click();
   await page.evaluate(() => document.body.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })));
   await translate("blob-image", { capture: false });
-  await waitText("Yomeruからこんにちは");
+  await waitCanvas();
   assert.equal(requests.length, 3);
   check("blob images can be decoded and resized without a stored image element");
 
   await translate("svg-image", { capture: false });
-  await waitText("Yomeruからこんにちは");
+  await waitCanvas();
   assert.equal(requests.length, 4);
   assert.equal(requests.at(-1).messages[0].content.find(part => part.type === "image").source.media_type, "image/png");
   check("data URL SVG images are rasterized to PNG before being sent to the API");
@@ -126,7 +147,7 @@ try {
     globalThis.fetch = (url, options) => original(String(url) === "https://images.example.com/hello.png" ? local : url, options);
   }, `http://127.0.0.1:${port}/image.png`);
   await translate("remote-image");
-  await waitText("Yomeruからこんにちは");
+  await waitCanvas();
   assert.equal(remoteFetches, 1);
   assert.equal(requests.length, 5);
   check("cross-origin images fall back from a tainted canvas to bounded background fetching and are resized before the API");
@@ -139,7 +160,7 @@ try {
     globalThis.fetch = (url, options) => original(String(url) === "https://images.example.com/hello.svg" ? local : url, options);
   }, `http://127.0.0.1:${port}/image.svg`);
   await translate("remote-image");
-  await waitText("Yomeruからこんにちは");
+  await waitCanvas();
   assert.equal(remoteSvgFetches, 1);
   assert.equal(requests.length, 6);
   assert.equal(requests.at(-1).messages[0].content.find(part => part.type === "image").source.media_type, "image/png");
@@ -152,14 +173,14 @@ try {
   await strictPage.waitForFunction(() => { const image = document.getElementById("blob-image"); return image.complete && image.naturalWidth === 0; });
   await strictPage.evaluate(() => document.getElementById("remote-image").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, composed: true })));
   await h.msg(strictTab, { type: "tf:translateImage", srcUrl: "https://images.example.com/hello.png" });
-  await strictPage.waitForFunction(() => document.getElementById("tf-host")?.shadowRoot?.querySelector(".pb")?.textContent === "Yomeruからこんにちは");
+  await waitCanvas(strictPage);
   assert.equal(remoteFetches, 2);
   await strictPage.route("https://images.example.com/hello.svg", route => route.fulfill({ contentType: "image/svg+xml", body: svgBytes }));
   await strictPage.evaluate(() => { document.getElementById("remote-image").src = "https://images.example.com/hello.svg"; });
   await strictPage.waitForFunction(() => document.getElementById("remote-image").naturalWidth === 1200);
   await strictPage.evaluate(() => document.getElementById("remote-image").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, composed: true })));
   await h.msg(strictTab, { type: "tf:translateImage", srcUrl: "https://images.example.com/hello.svg" });
-  await strictPage.waitForFunction(() => document.getElementById("tf-host")?.shadowRoot?.querySelector(".pb")?.textContent === "Yomeruからこんにちは");
+  await waitCanvas(strictPage);
   assert.equal(remoteSvgFetches, 2);
   await strictPage.close();
   check("cross-origin raster and SVG fallbacks work when page CSP forbids blob image URLs");
@@ -168,24 +189,27 @@ try {
   let usageBefore = await usageRequests();
   responseMode = "invalid";
   await translate("data-image");
-  await waitText("エラー:");
+  await waitOverlayText("エラー:");
   assert.equal(await usageRequests(), usageBefore + 1);
-  assert.equal(await page.locator("#tf-host .orig").isVisible(), false);
+  assert.equal(await page.locator("#tf-image-host .toggle").isVisible(), false);
   usageBefore = await usageRequests();
   responseMode = "truncated";
   await translate("data-image");
-  await waitText("途中で切れました");
+  await waitOverlayText("途中で切れました");
   assert.equal(await usageRequests(), usageBefore + 1);
+  responseMode = "empty";
+  await translate("data-image");
+  await waitOverlayText("読み取れる文字がありません");
   responseMode = "ok";
-  check("malformed or truncated image answers show errors without caching a result, while actual API usage is recorded");
+  check("empty, malformed and truncated image answers stay inline, while actual API usage is recorded");
 
   delay = 700;
   let pendingRequests = requests.length;
   await translate("data-image");
   await waitRequests(pendingRequests + 1);
-  await page.locator("#tf-host .x").click();
+  await page.locator("#tf-image-host .close").click();
   await page.waitForTimeout(800);
-  assert.equal(await page.locator("#tf-host .panel").isVisible(), false);
+  assert.equal(await page.locator("#tf-image-host .frame").isVisible(), false);
   pendingRequests = requests.length;
   await translate("data-image");
   await waitRequests(pendingRequests + 1);
@@ -195,11 +219,12 @@ try {
     document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   });
   await page.locator("#tf-host .explainbtn").click();
-  await waitText("ページの選択箇所の解説です。");
+  await page.waitForFunction(() => document.getElementById("tf-host")?.shadowRoot?.querySelector(".pb")?.textContent === "ページの選択箇所の解説です。");
   await page.waitForTimeout(800);
   assert.equal(await page.locator("#tf-host .panel-title").textContent(), "Yomeru 解説");
   assert.equal(await page.locator("#tf-host .pb").textContent(), "ページの選択箇所の解説です。");
-  check("closing an image panel or switching to a selection cancels it and stale image results cannot overwrite the new panel");
+  assert.equal(await page.locator("#tf-image-host .frame").isVisible(), false);
+  check("restoring an image or switching to a selection cancels it and stale image results cannot reappear");
   console.log("ALL IMAGE TESTS PASSED");
 } finally {
   if (h) await h.close();

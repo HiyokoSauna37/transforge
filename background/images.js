@@ -3,7 +3,7 @@ import { estimateCostUsd } from "../shared/models.js";
 import { buildRequest, extractText, usageOf, checkStop } from "../shared/api.js";
 import { cacheGetMany, cacheSetMany, sha256 } from "../shared/cache.js";
 import { getSettings, addUsage } from "../shared/settings.js";
-import { IMAGE_VERSION, normalizeImageRequest, buildImageSystem, buildImageMessage, parseImageResult, fetchRemoteImage } from "../shared/image.js";
+import { IMAGE_VERSION, normalizeImageRequest, buildImageSystem, buildImageMessage, imageOutputFormat, parseImageResult, fetchRemoteImage } from "../shared/image.js";
 import { abortError, fatalError, fetchWithRetry, withSession } from "./requests.js";
 
 export async function fetchImage(msg) {
@@ -27,14 +27,15 @@ export async function translateImage(msg) {
       const hits = await cacheGetMany([key]);
       if (signal.aborted) throw abortError();
       if (hits.has(key)) {
-        try { return { ok: true, ...parseImageResult(hits.get(key)), usage: null, cached: 1, model: s.model }; }
+        try { return { ok: true, ...parseImageResult(hits.get(key), input.image), usage: null, cached: 1, model: s.model }; }
         catch { /* 壊れたキャッシュは使わず翻訳し直す。画像そのものは保存しない。 */ }
       }
     }
     if (signal.aborted) throw abortError();
     const req = buildRequest(s, system, message, { maxTokens: 8000 });
+    req.body.output_config.format = imageOutputFormat();
     req.body.messages[0].content = [
-      { type: "image", source: { type: "base64", media_type: input.image.mediaType, data: input.image.data } },
+      { type: "image", source: { type: "base64", media_type: input.image.mediaType, data: input.image.data }, transformations: { oversized_image: "error" } },
       { type: "text", text: message },
     ];
     const response = await fetchWithRetry(req, signal);
@@ -46,8 +47,8 @@ export async function translateImage(msg) {
     const stop = checkStop(response);
     if (!stop.ok) throw fatalError(stop.message);
     if (stop.truncated) throw new Error("画像翻訳の応答が途中で切れました。文字の少ない範囲に分けてお試しください。");
-    const result = parseImageResult(extractText(response));
-    if (s.cacheEnabled) await cacheSetMany([{ k: key, t: JSON.stringify({ original: result.original, translation: result.text }) }]);
+    const result = parseImageResult(extractText(response), input.image);
+    if (s.cacheEnabled) await cacheSetMany([{ k: key, t: JSON.stringify({ regions: result.regions }) }]);
     if (signal.aborted) throw abortError();
     return { ok: true, ...result, usage: { ...u, costUsd }, cached: 0, model: s.model };
   }, { timeoutMs: 60000, timeoutMessage: "画像の翻訳がタイムアウトしました。もう一度お試しください。" });
