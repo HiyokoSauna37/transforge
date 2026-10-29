@@ -246,6 +246,11 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
       questionForm.querySelector("button").disabled = true;
       handlers.onAskQuestion(question);
     });
+    questionInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || (!e.ctrlKey && !e.metaKey) || e.isComposing) return;
+      e.preventDefault();
+      questionForm.requestSubmit();
+    });
     $(".followup").addEventListener("click", () => handlers.onFollowupQuestion());
     modelSelect.addEventListener("change", () => handlers.onPanelModelChange(modelSelect.value));
     $(".simple").addEventListener("click", () => handlers.onExplainDetail("simple"));

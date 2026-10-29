@@ -114,8 +114,13 @@ try {
   await page.locator("#tf-host .question-form button").click();
   assert.equal(stats.requests.length, 5);
   const question = "lease が切れた後、quorum は必要？";
-  await page.locator("#tf-host .question-form textarea").fill(question);
-  await page.locator("#tf-host .question-form button").click();
+  const questionInput = page.locator("#tf-host .question-form textarea");
+  await questionInput.fill("改行は送信しない");
+  await questionInput.press("Enter");
+  assert.equal(await questionInput.inputValue(), "改行は送信しない\n");
+  assert.equal(stats.requests.length, 5);
+  await questionInput.fill(question);
+  await questionInput.press("Control+Enter");
   await waitResult("質問への回答");
   assert.equal(stats.requests.length, 6);
   const asked = JSON.parse(stats.requests[5].body.messages[0].content);
@@ -133,7 +138,7 @@ try {
   await waitResult("質問への回答");
   assert.equal(stats.requests.length, 7);
   assert.equal(await page.locator("#tf-host .cost").textContent(), "cache");
-  check("question form sends no request until submission; question, selection and page evidence are sent together and refinements keep the question");
+  check("question form sends with Ctrl+Enter while plain Enter inserts a newline; question, selection and page evidence stay together");
 
   const budget = await page.evaluate(() => {
     const holder = document.createElement("section");
