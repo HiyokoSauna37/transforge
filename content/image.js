@@ -159,6 +159,22 @@
     });
   }
 
+  function dominantColor(samples) {
+    if (!samples.length) return [255, 255, 255];
+    const buckets = new Map();
+    for (const pixel of samples) {
+      const key = `${pixel[0] >> 4},${pixel[1] >> 4},${pixel[2] >> 4}`;
+      const bucket = buckets.get(key) || { count: 0, red: 0, green: 0, blue: 0 };
+      bucket.count++;
+      bucket.red += pixel[0];
+      bucket.green += pixel[1];
+      bucket.blue += pixel[2];
+      buckets.set(key, bucket);
+    }
+    const best = [...buckets.values()].sort((a, b) => b.count - a.count)[0];
+    return [best.red / best.count, best.green / best.count, best.blue / best.count];
+  }
+
   function colorDistance(a, b) {
     return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
   }
@@ -169,7 +185,7 @@
 
   function regionColors(image, width, height, box) {
     const [x, y, w, h] = box;
-    const pad = Math.max(2, Math.round(Math.min(w, h) * 0.08));
+    const pad = Math.max(2, Math.round(Math.min(w, h) * 0.04));
     const left = Math.max(0, x - pad);
     const top = Math.max(0, y - pad);
     const right = Math.min(width, x + w + pad);
@@ -189,8 +205,19 @@
       groups.left.push(pixel(Math.max(0, left - 1), py));
       groups.right.push(pixel(Math.min(width - 1, right), py));
     }
-    const edges = Object.fromEntries(Object.entries(groups).map(([key, values]) => [key, medianColor(values.filter((value) => value[3] > 32))]));
-    const background = medianColor(Object.values(groups).flat().filter((value) => value[3] > 32));
+    const areaSamples = [];
+    const areaStep = Math.max(1, Math.floor(Math.sqrt(Math.max(1, (right - left) * (bottom - top) / 8000))));
+    for (let py = top; py < bottom; py += areaStep) {
+      for (let px = left; px < right; px += areaStep) {
+        const value = pixel(px, py);
+        if (value[3] > 32) areaSamples.push(value);
+      }
+    }
+    const background = dominantColor(areaSamples);
+    const edges = Object.fromEntries(Object.entries(groups).map(([key, values]) => {
+      const edge = medianColor(values.filter((value) => value[3] > 32));
+      return [key, colorDistance(edge, background) > 72 ? background : edge];
+    }));
     const candidates = [];
     const insideStep = Math.max(1, Math.floor(Math.min(w, h) / 40));
     for (let py = y; py < y + h; py += insideStep) {
@@ -338,10 +365,11 @@
   function imageOverlay(onClose) {
     const host = document.createElement("div");
     host.id = "tf-image-host";
-    host.style.cssText = "all:initial;position:fixed;inset:0;z-index:2147483646;pointer-events:none";
+    // ページ直下の通常レイヤーに置く。固定ヘッダーなど、元画像を覆う要素の上には出さない。
+    host.style.cssText = "all:initial;position:absolute;left:0;top:0;width:0;height:0;z-index:1;pointer-events:none";
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<style>
-:host{all:initial}[hidden]{display:none!important}.frame{position:fixed;overflow:hidden;pointer-events:none;box-sizing:border-box}.image{position:absolute;display:block;pointer-events:none}.status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:calc(100% - 16px);padding:8px 12px;border-radius:10px;background:rgba(30,27,25,.9);color:#fff;font:600 12px/1.5 system-ui,sans-serif;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.24)}.status.busy::before{content:"";display:inline-block;width:11px;height:11px;margin-right:7px;vertical-align:-1px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}.status.error{background:rgba(132,38,38,.94)}.actions{position:absolute;right:7px;top:7px;display:flex;gap:5px;pointer-events:auto}.actions button{border:1px solid rgba(255,255,255,.42);border-radius:8px;background:rgba(30,27,25,.88);color:#fff;font:600 11px/1 system-ui,sans-serif;padding:7px 9px;box-shadow:0 2px 9px rgba(0,0,0,.22);cursor:pointer}.actions button:hover{background:rgba(70,61,56,.95)}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.status.busy::before{animation:none}}
+:host{all:initial}[hidden]{display:none!important}.frame{position:absolute;overflow:hidden;pointer-events:none;box-sizing:border-box}.image{position:absolute;display:block;pointer-events:none}.status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:calc(100% - 16px);padding:8px 12px;border-radius:10px;background:rgba(30,27,25,.9);color:#fff;font:600 12px/1.5 system-ui,sans-serif;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.24)}.status.busy::before{content:"";display:inline-block;width:11px;height:11px;margin-right:7px;vertical-align:-1px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}.status.error{background:rgba(132,38,38,.94)}.actions{position:absolute;right:7px;top:7px;display:flex;gap:5px;pointer-events:auto}.actions button{border:1px solid rgba(255,255,255,.42);border-radius:8px;background:rgba(30,27,25,.88);color:#fff;font:600 11px/1 system-ui,sans-serif;padding:7px 9px;box-shadow:0 2px 9px rgba(0,0,0,.22);cursor:pointer}.actions button:hover{background:rgba(70,61,56,.95)}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.status.busy::before{animation:none}}
 </style><div class="frame" hidden><canvas class="image" hidden></canvas><div class="status busy">画像を翻訳しています…</div><div class="actions" hidden><button class="toggle">原文</button><button class="close">戻す</button></div></div>`;
     document.documentElement.append(host);
     const frame = root.querySelector(".frame");
@@ -379,8 +407,8 @@
       const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
       const width = Math.max(1, (source.clientWidth - paddingLeft - paddingRight) * scaleX);
       const height = Math.max(1, (source.clientHeight - paddingTop - paddingBottom) * scaleY);
-      frame.style.left = `${rect.left + (source.clientLeft + paddingLeft) * scaleX}px`;
-      frame.style.top = `${rect.top + (source.clientTop + paddingTop) * scaleY}px`;
+      frame.style.left = `${window.scrollX + rect.left + (source.clientLeft + paddingLeft) * scaleX}px`;
+      frame.style.top = `${window.scrollY + rect.top + (source.clientTop + paddingTop) * scaleY}px`;
       frame.style.width = `${width}px`;
       frame.style.height = `${height}px`;
       frame.style.borderRadius = style.borderRadius;
@@ -417,8 +445,8 @@
       clearInterval(timer);
       timer = setInterval(update, 180);
       const rect = source.getBoundingClientRect();
-      frame.style.left = `${rect.left}px`;
-      frame.style.top = `${rect.top}px`;
+      frame.style.left = `${window.scrollX + rect.left}px`;
+      frame.style.top = `${window.scrollY + rect.top}px`;
       frame.style.width = `${Math.max(1, rect.width)}px`;
       frame.style.height = `${Math.max(1, rect.height)}px`;
     }

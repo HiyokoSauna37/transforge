@@ -11,6 +11,8 @@ const canvas = document.createElement("canvas");
 canvas.width = 4096; canvas.height = 1024;
 const ctx = canvas.getContext("2d");
 ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+ctx.fillStyle = "#9ed8f8"; ctx.strokeStyle = "#171717"; ctx.lineWidth = 20;
+ctx.beginPath(); ctx.roundRect(90, 250, 3000, 500, 60); ctx.fill(); ctx.stroke();
 ctx.fillStyle = "#222"; ctx.font = "160px sans-serif"; ctx.fillText("Hello from Yomeru", 160, 550);
 document.getElementById("data-image").src = canvas.toDataURL("image/png");
 canvas.toBlob(blob => { document.getElementById("blob-image").src = URL.createObjectURL(blob); }, "image/png");

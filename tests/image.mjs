@@ -106,11 +106,33 @@ try {
     return count;
   });
   assert.ok(paintedPixels > 1000);
+  const backgroundPixel = await page.locator("#tf-image-host canvas.image").evaluate(canvas => [...canvas.getContext("2d").getImageData(100, 150, 1, 1).data]);
+  assert.ok(backgroundPixel[0] > 100 && backgroundPixel[1] > 180 && backgroundPixel[2] > 210, `expected the blue shape background, got ${backgroundPixel}`);
+  const stacking = await page.evaluate(async () => {
+    const header = document.createElement("header");
+    header.id = "sticky-test";
+    header.style.cssText = "position:fixed;z-index:10;left:0;right:0;top:0;height:80px;background:#063b3e";
+    const spacer = document.createElement("div");
+    spacer.id = "scroll-spacer";
+    spacer.style.height = "1200px";
+    document.body.append(header, spacer);
+    const image = document.getElementById("data-image");
+    scrollTo(0, scrollY + image.getBoundingClientRect().top - 20);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const frame = document.getElementById("tf-image-host").shadowRoot.querySelector(".frame");
+    const headerRect = header.getBoundingClientRect();
+    const frameRect = frame.getBoundingClientRect();
+    return { overlaps: headerRect.bottom > frameRect.top && headerRect.top < frameRect.bottom,
+      overlayZ: Number(getComputedStyle(document.getElementById("tf-image-host")).zIndex), headerZ: Number(getComputedStyle(header).zIndex) };
+  });
+  assert.equal(stacking.overlaps, true);
+  assert.ok(stacking.overlayZ < stacking.headerZ);
+  await page.evaluate(() => { document.getElementById("sticky-test").remove(); document.getElementById("scroll-spacer").remove(); scrollTo(0, 0); });
   await page.locator("#tf-image-host .toggle").click();
   assert.equal(await page.locator("#tf-image-host canvas.image").isVisible(), false);
   assert.equal(await page.locator("#tf-image-host .toggle").textContent(), "訳文");
   await page.locator("#tf-image-host .toggle").click();
-  check("right-click alone sends nothing; translation paints bounded text replacements over the image without opening a modal");
+  check("translation keeps a shape's dominant background color and stays below overlapping sticky content without a modal");
 
   await translate("data-image");
   await waitCanvas();
