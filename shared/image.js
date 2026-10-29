@@ -4,6 +4,7 @@ import { parseGlossary } from "./prompt.js";
 export const IMAGE_VERSION = 1;
 export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const IMAGE_TYPES = Object.freeze(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+export const IMAGE_SOURCE_TYPES = Object.freeze([...IMAGE_TYPES, "image/svg+xml"]);
 const fail = (message) => { throw new Error(message); };
 
 export function imageSenderAllowed(sender) {
@@ -16,6 +17,10 @@ function magicType(bytes) {
   if (bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return "image/jpeg";
   if (bytes.length >= 12 && [82,73,70,70].every((v,i) => bytes[i] === v) && [87,69,66,80].every((v,i) => bytes[i+8] === v)) return "image/webp";
   if (bytes.length >= 6 && [71,73,70,56].every((v,i) => bytes[i] === v) && (bytes[4] === 55 || bytes[4] === 57) && bytes[5] === 97) return "image/gif";
+  // SVG には固定のマジックバイトがない。XML 宣言・コメント・DOCTYPE の後に
+  // svg ルート要素があることを、先頭8KBに限定して確認する。
+  const text = new TextDecoder().decode(bytes.subarray(0, 8192)).replace(/^\uFEFF/, "");
+  if (/^(?:\s|<\?xml[\s\S]*?\?>|<!--[\s\S]*?-->|<!doctype[\s\S]*?>)*<svg(?:\s|\/?>)/i.test(text)) return "image/svg+xml";
   return null;
 }
 
@@ -112,7 +117,7 @@ export async function fetchRemoteImage(value, externalSignal) {
     const rejectResponse = (message) => { ctrl.abort(); throw new Error(message); };
     if (!response.ok) rejectResponse(`画像を取得できませんでした（HTTP ${response.status}）。`);
     const mediaType = (response.headers.get("content-type") || "").split(";",1)[0].trim().toLowerCase();
-    if (!IMAGE_TYPES.includes(mediaType)) rejectResponse("PNG・JPEG・WebP・GIFの画像だけ翻訳できます。");
+    if (!IMAGE_SOURCE_TYPES.includes(mediaType)) rejectResponse("PNG・JPEG・WebP・GIF・SVGの画像だけ翻訳できます。");
     if (Number(response.headers.get("content-length")) > IMAGE_MAX_BYTES) rejectResponse("画像は5MB以下にしてください。");
     if (!response.body) rejectResponse("画像データを取得できませんでした。");
     const reader = response.body.getReader();

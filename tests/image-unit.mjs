@@ -1,17 +1,21 @@
 import assert from "node:assert/strict";
-import { IMAGE_MAX_BYTES, normalizeImage, normalizeImageRequest, imageSenderAllowed, buildImageSystem, buildImageMessage, parseImageResult, imageFetchUrl, fetchRemoteImage } from "../shared/image.js";
+import { IMAGE_MAX_BYTES, IMAGE_SOURCE_TYPES, normalizeImage, normalizeImageRequest, imageSenderAllowed, buildImageSystem, buildImageMessage, parseImageResult, imageFetchUrl, fetchRemoteImage } from "../shared/image.js";
 
 const check = (name) => console.log(`✓ ${name}`);
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6rXQAAAAASUVORK5CYII=";
 const bytes = Uint8Array.from(atob(png), (c) => c.charCodeAt(0));
+const svg = '<?xml version="1.0"?><!-- test --><svg xmlns="http://www.w3.org/2000/svg" width="120" height="40"><text y="25">Hello</text></svg>';
+const svgBytes = new TextEncoder().encode(svg);
+const svgImage = { data: Buffer.from(svgBytes).toString("base64"), mediaType: "image/svg+xml" };
 const input = { image: { data: png, mediaType: "image/png" }, context: { title: "Example", url: "https://example.com/page?token=private#part" } };
 assert.deepEqual(normalizeImage(input.image), input.image);
 for (const value of ["", "data:image/png;base64,"+png, png+"\n", "%%%===", "AB=="]) assert.throws(() => normalizeImage({ mediaType: "image/png", data: value }));
 assert.throws(() => normalizeImage({ data: png, mediaType: "image/jpeg" }), /一致/);
 assert.throws(() => normalizeImage({ data: btoa('<svg xmlns="http://www.w3.org/2000/svg"/>'), mediaType: "image/svg+xml" }), /形式/);
+assert.ok(IMAGE_SOURCE_TYPES.includes("image/svg+xml"));
 const tooBig = new Uint8Array(IMAGE_MAX_BYTES+1); tooBig.set(bytes.subarray(0,8));
 assert.throws(() => normalizeImage({ mediaType: "image/png", data: Buffer.from(tooBig).toString("base64") }), /5MB/);
-check("image input enforces canonical base64, a 5MB decoded limit, allowed raster MIME types and matching file signatures");
+check("API image input stays raster-only while fetched source formats include SVG for client-side conversion");
 
 const normalized = normalizeImageRequest(input);
 assert.equal(normalized.context.url, "https://example.com/page");
@@ -53,9 +57,11 @@ try {
     return new Response(bytes, { headers: { "content-type": "image/png" } });
   };
   assert.deepEqual(await fetchRemoteImage("https://images.example.com/a.png"), input.image);
+  globalThis.fetch = async () => new Response(svgBytes, { headers: { "content-type": "image/svg+xml; charset=utf-8" } });
+  assert.deepEqual(await fetchRemoteImage("https://images.example.com/a.svg"), svgImage);
   await assert.rejects(fetchRemoteImage("http://localhost/a.png"), /ローカル/);
   assert.equal(calls, 1);
-  check("remote image retrieval omits credentials/referrer, forbids redirects and never fetches rejected local URLs");
+  check("remote image retrieval accepts verified SVG while omitting credentials/referrer and rejecting local URLs");
 
   let responseAborted = false;
   globalThis.fetch = async (_url, options) => {
@@ -66,6 +72,8 @@ try {
   assert.equal(responseAborted, true);
   globalThis.fetch = async () => new Response(bytes, { headers: { "content-type": "image/jpeg" } });
   await assert.rejects(fetchRemoteImage("https://images.example.com/a.png"), /一致/);
+  globalThis.fetch = async () => new Response(new TextEncoder().encode("<html>not svg</html>"), { headers: { "content-type": "image/svg+xml" } });
+  await assert.rejects(fetchRemoteImage("https://images.example.com/a.svg"), /一致/);
   globalThis.fetch = async () => new Response(bytes, { headers: { "content-type": "image/png", "content-length": String(IMAGE_MAX_BYTES+1) } });
   await assert.rejects(fetchRemoteImage("https://images.example.com/a.png"), /5MB/);
   let canceled = false;

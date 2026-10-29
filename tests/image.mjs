@@ -6,7 +6,9 @@ import { launch } from "./harness.mjs";
 
 const requests = [];
 let imageBytes = null;
+const svgBytes = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400"><rect width="100%" height="100%" fill="white"/><text x="60" y="230" font-size="100">Remote SVG</text></svg>');
 let remoteFetches = 0;
+let remoteSvgFetches = 0;
 let delay = 40;
 let responseMode = "ok";
 const server = http.createServer(async (req, res) => {
@@ -18,6 +20,11 @@ const server = http.createServer(async (req, res) => {
     remoteFetches++;
     res.writeHead(200, { "content-type": "image/png" });
     return res.end(imageBytes);
+  }
+  if (req.method === "GET" && req.url === "/image.svg") {
+    remoteSvgFetches++;
+    res.writeHead(200, { "content-type": "image/svg+xml" });
+    return res.end(svgBytes);
   }
   if (req.method !== "POST" || req.url !== "/v1/messages") { res.writeHead(404); res.end(); return; }
   let raw = "";
@@ -42,7 +49,7 @@ try {
   const settings = { schema: 2, apiKey: "test-key", apiBase: `http://127.0.0.1:${port}`, model: "claude-sonnet-5-5", targetLang: "日本語", effort: "low", cacheEnabled: true, autoHosts: [] };
   await h.setSettings(settings);
   const { page, tabId } = await h.open(`http://127.0.0.1:${port}/image.html?private=hidden#secret`);
-  await page.waitForFunction(() => ["data-image", "blob-image"].every(id => document.getElementById(id).naturalWidth === 4096));
+  await page.waitForFunction(() => ["data-image", "blob-image"].every(id => document.getElementById(id).naturalWidth === 4096) && document.getElementById("svg-image").naturalWidth === 1200);
   const pickImage = async (id) => page.evaluate(id => {
     const img = document.getElementById(id);
     img.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, composed: true }));
@@ -103,6 +110,12 @@ try {
   assert.equal(requests.length, 3);
   check("blob images can be decoded and resized without a stored image element");
 
+  await translate("svg-image", { capture: false });
+  await waitText("Yomeruからこんにちは");
+  assert.equal(requests.length, 4);
+  assert.equal(requests.at(-1).messages[0].content.find(part => part.type === "image").source.media_type, "image/png");
+  check("data URL SVG images are rasterized to PNG before being sent to the API");
+
   imageBytes = Buffer.from((await page.locator("#data-image").getAttribute("src")).split(",")[1], "base64");
   await page.route("https://images.example.com/hello.png", route => route.fulfill({ contentType: "image/png", body: imageBytes }));
   await page.evaluate(() => { document.getElementById("remote-image").src = "https://images.example.com/hello.png"; });
@@ -115,8 +128,22 @@ try {
   await translate("remote-image");
   await waitText("Yomeruからこんにちは");
   assert.equal(remoteFetches, 1);
-  assert.equal(requests.length, 4);
+  assert.equal(requests.length, 5);
   check("cross-origin images fall back from a tainted canvas to bounded background fetching and are resized before the API");
+
+  await page.route("https://images.example.com/hello.svg", route => route.fulfill({ contentType: "image/svg+xml", body: svgBytes }));
+  await page.evaluate(() => { document.getElementById("remote-image").src = "https://images.example.com/hello.svg"; });
+  await page.waitForFunction(() => document.getElementById("remote-image").naturalWidth === 1200);
+  await h.sw.evaluate(local => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (url, options) => original(String(url) === "https://images.example.com/hello.svg" ? local : url, options);
+  }, `http://127.0.0.1:${port}/image.svg`);
+  await translate("remote-image");
+  await waitText("Yomeruからこんにちは");
+  assert.equal(remoteSvgFetches, 1);
+  assert.equal(requests.length, 6);
+  assert.equal(requests.at(-1).messages[0].content.find(part => part.type === "image").source.media_type, "image/png");
+  check("cross-origin SVG images are verified, fetched and rasterized before the API request");
 
   const { page: strictPage, tabId: strictTab } = await h.open(`http://127.0.0.1:${port}/image.html?csp=1`);
   await strictPage.route("https://images.example.com/hello.png", route => route.fulfill({ contentType: "image/png", body: imageBytes }));
@@ -127,8 +154,15 @@ try {
   await h.msg(strictTab, { type: "tf:translateImage", srcUrl: "https://images.example.com/hello.png" });
   await strictPage.waitForFunction(() => document.getElementById("tf-host")?.shadowRoot?.querySelector(".pb")?.textContent === "Yomeruからこんにちは");
   assert.equal(remoteFetches, 2);
+  await strictPage.route("https://images.example.com/hello.svg", route => route.fulfill({ contentType: "image/svg+xml", body: svgBytes }));
+  await strictPage.evaluate(() => { document.getElementById("remote-image").src = "https://images.example.com/hello.svg"; });
+  await strictPage.waitForFunction(() => document.getElementById("remote-image").naturalWidth === 1200);
+  await strictPage.evaluate(() => document.getElementById("remote-image").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, composed: true })));
+  await h.msg(strictTab, { type: "tf:translateImage", srcUrl: "https://images.example.com/hello.svg" });
+  await strictPage.waitForFunction(() => document.getElementById("tf-host")?.shadowRoot?.querySelector(".pb")?.textContent === "Yomeruからこんにちは");
+  assert.equal(remoteSvgFetches, 2);
   await strictPage.close();
-  check("cross-origin image fallback also works when page CSP forbids blob image URLs");
+  check("cross-origin raster and SVG fallbacks work when page CSP forbids blob image URLs");
 
   const usageRequests = () => h.sw.evaluate(async () => (await chrome.storage.local.get("settings")).settings.usage?.requests || 0);
   let usageBefore = await usageRequests();

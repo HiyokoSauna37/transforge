@@ -4,7 +4,8 @@
   const MAX_BYTES = 5 * 1024 * 1024;
   const MAX_PIXELS = 40_000_000;
   const MAX_SIDE = 2048;
-  const TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+  const API_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+  const SOURCE_TYPES = new Set([...API_TYPES, "image/svg+xml"]);
   const EMPTY_RECT = { left: 40, right: 40, top: 40, bottom: 40 };
   const aborted = () => new DOMException("中止しました", "AbortError");
 
@@ -58,17 +59,42 @@
 
   async function decodeAndEncode(blob, signal) {
     if (signal.aborted) throw aborted();
-    if (!TYPES.has(blob.type)) throw new Error("PNG・JPEG・WebP・GIFの画像を選んでください。");
+    if (!SOURCE_TYPES.has(blob.type)) throw new Error("PNG・JPEG・WebP・GIF・SVGの画像を選んでください。");
     if (blob.size > MAX_BYTES) throw new Error("画像は5MB以下にしてください。");
-    // blob: URL を img に読み込ませると、閲覧ページの img-src CSP に阻まれる。
-    // DOM を使わずにデコードすれば厳しいサイトでも取得済みの画素を処理できる。
     let source;
+    let objectUrl = "";
     try {
-      try { source = await createImageBitmap(blob); }
-      catch { throw new Error("画像を読み取れませんでした。破損していない画像を選んでください。"); }
+      try {
+        if (blob.type === "image/svg+xml") {
+          // Chromium は SVG Blob を createImageBitmap で直接デコードできない。
+          // data: を先に使い、ページの img-src が data: を拒む場合だけ blob: も試す。
+          const encoded = await blobData(blob, signal);
+          const load = (url) => new Promise((resolve, reject) => {
+            if (signal.aborted) { reject(aborted()); return; }
+            const image = new Image();
+            const cleanup = () => signal.removeEventListener("abort", cancel);
+            const cancel = () => { cleanup(); image.src = ""; reject(aborted()); };
+            signal.addEventListener("abort", cancel, { once: true });
+            image.onload = () => { cleanup(); resolve(image); };
+            image.onerror = () => { cleanup(); reject(new Error("decode")); };
+            image.src = url;
+          });
+          try { source = await load(`data:image/svg+xml;base64,${encoded.data}`); }
+          catch (error) {
+            if (error.name === "AbortError") throw error;
+            objectUrl = URL.createObjectURL(blob);
+            source = await load(objectUrl);
+          }
+        } else source = await createImageBitmap(blob);
+      } catch (error) {
+        if (error.name === "AbortError") throw error;
+        throw new Error("画像を読み取れませんでした。破損していない画像を選んでください。");
+      }
       return await encode(source, signal);
     } finally {
-      source?.close();
+      if (typeof source?.close === "function") source.close();
+      else if (source) source.src = "";
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     }
   }
 
@@ -77,7 +103,7 @@
     const response = await fetch(url, { signal });
     if (!response.ok || !response.body) throw new Error("画像を取得できませんでした。");
     const mediaType = (response.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
-    if (!TYPES.has(mediaType)) throw new Error("PNG・JPEG・WebP・GIFの画像を選んでください。");
+    if (!SOURCE_TYPES.has(mediaType)) throw new Error("PNG・JPEG・WebP・GIF・SVGの画像を選んでください。");
     const reader = response.body.getReader();
     const chunks = [];
     let length = 0;
@@ -95,7 +121,7 @@
   }
 
   function remoteBlob(image) {
-    if (!image || !TYPES.has(image.mediaType) || typeof image.data !== "string" || image.data.length > Math.ceil(MAX_BYTES / 3) * 4) {
+    if (!image || !SOURCE_TYPES.has(image.mediaType) || typeof image.data !== "string" || image.data.length > Math.ceil(MAX_BYTES / 3) * 4) {
       throw new Error("画像の形式またはサイズが不正です。");
     }
     const binary = atob(image.data);
