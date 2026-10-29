@@ -108,7 +108,7 @@ try {
   assert.ok(paintedPixels > 1000);
   const backgroundPixel = await page.locator("#tf-image-host canvas.image").evaluate(canvas => [...canvas.getContext("2d").getImageData(100, 150, 1, 1).data]);
   assert.ok(backgroundPixel[0] > 100 && backgroundPixel[1] > 180 && backgroundPixel[2] > 210, `expected the blue shape background, got ${backgroundPixel}`);
-  const stacking = await page.evaluate(async () => {
+  const screenshotClip = await page.evaluate(async () => {
     const header = document.createElement("header");
     header.id = "sticky-test";
     header.style.cssText = "position:fixed;z-index:10;left:0;right:0;top:0;height:80px;background:#063b3e";
@@ -117,24 +117,68 @@ try {
     spacer.style.height = "1200px";
     document.body.append(header, spacer);
     const image = document.getElementById("data-image");
+    // Keep translated pixels visible below the header, including part of the masked background.
+    image.style.cssText = "width:800px;max-width:none;max-height:none";
     scrollTo(0, scrollY + image.getBoundingClientRect().top - 20);
     await new Promise(resolve => setTimeout(resolve, 300));
-    const frame = document.getElementById("tf-image-host").shadowRoot.querySelector(".frame");
-    const headerRect = header.getBoundingClientRect();
-    const frameRect = frame.getBoundingClientRect();
-    return { overlaps: headerRect.bottom > frameRect.top && headerRect.top < frameRect.bottom,
-      overlayZ: Number(getComputedStyle(document.getElementById("tf-image-host")).zIndex),
-      contentZ: Number(getComputedStyle(document.body).zIndex), clipPath: frame.style.clipPath };
+    const rect = image.getBoundingClientRect();
+    // Exclude the controls so their labels cannot make a hidden translation pass this check.
+    return { x: rect.left + 1, y: rect.top + 1, width: 600, height: 200 };
   });
-  assert.equal(stacking.overlaps, true);
-  assert.ok(stacking.overlayZ > stacking.contentZ, "the translated canvas must stay above positioned page content");
-  assert.match(stacking.clipPath, /^inset\((?:5\d|60)(?:\.\d+)?px /, "the fixed header overlap must be clipped from the canvas");
-  await page.evaluate(() => { document.getElementById("sticky-test").remove(); document.getElementById("scroll-spacer").remove(); scrollTo(0, 0); });
+  const translatedScreenshot = await page.screenshot({ clip: screenshotClip });
   await page.locator("#tf-image-host .toggle").click();
   assert.equal(await page.locator("#tf-image-host canvas.image").isVisible(), false);
   assert.equal(await page.locator("#tf-image-host .toggle").textContent(), "訳文");
+  const originalScreenshot = await page.screenshot({ clip: screenshotClip });
+  const differences = await page.evaluate(async ({ translated, original, headerHeight }) => {
+    const pixels = async data => {
+      const bytes = Uint8Array.from(atob(data), char => char.charCodeAt(0));
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0);
+        return ctx.getImageData(0, 0, canvas.width, canvas.height);
+      } finally { bitmap.close(); }
+    };
+    const [a, b] = await Promise.all([pixels(translated), pixels(original)]);
+    let header = 0;
+    let image = 0;
+    for (let i = 0; i < a.data.length; i += 4) {
+      if ([0, 1, 2].some(channel => Math.abs(a.data[i + channel] - b.data[i + channel]) > 10)) {
+        if (Math.floor(i / 4 / a.width) < headerHeight) header++;
+        else image++;
+      }
+    }
+    return { header, image };
+  }, { translated: translatedScreenshot.toString("base64"), original: originalScreenshot.toString("base64"), headerHeight: 80 - screenshotClip.y });
+  assert.equal(differences.header, 0, "translated pixels must not paint over the fixed header");
+  assert.ok(differences.image > 200, `translation must visibly replace the positioned image's text, got ${differences.image} changed pixels`);
   await page.locator("#tf-image-host .toggle").click();
+  await page.evaluate(() => {
+    document.getElementById("sticky-test").remove();
+    document.getElementById("scroll-spacer").remove();
+    document.getElementById("data-image").removeAttribute("style");
+    scrollTo(0, 0);
+  });
   check("translation stays above positioned images, clips overlapping sticky content and keeps the shape background color");
+
+  // Letterboxing/cropping must follow the image's content box, not its border and padding.
+  for (const fit of ["contain", "cover"]) {
+    await page.locator("#data-image").evaluate((image, fit) => {
+      image.style.cssText = `width:420px;height:180px;padding:12px;object-fit:${fit};object-position:right bottom`;
+    }, fit);
+    await page.waitForFunction(fit => {
+      const source = document.getElementById("data-image").getBoundingClientRect();
+      const canvas = document.getElementById("tf-image-host").shadowRoot.querySelector("canvas").getBoundingClientRect();
+      const expected = fit === "contain" ? { width: 420, height: 105, left: source.left + 13, top: source.top + 88 }
+        : { width: 720, height: 180, left: source.left - 287, top: source.top + 13 };
+      return Object.entries(expected).every(([key, value]) => Math.abs(canvas[key] - value) < 0.5);
+    }, fit, { timeout: 3000 });
+  }
+  await page.locator("#data-image").evaluate(image => image.removeAttribute("style"));
+  check("image overlays follow object-fit contain/cover, bottom-right positioning, borders and padding");
 
   await translate("data-image");
   await waitCanvas();

@@ -296,7 +296,11 @@ content/page.js        ページ翻訳の DOM 適用・復元と、翻訳済み�
 content/context.js     選択箇所と質問の語をもとに、周辺やページ内の関連する定義・用例を収集
 content/ui.js          ページ内 UI（進行バッジ・選択操作・結果パネル）の Shadow DOM
 content/selection.js   選択範囲の翻訳・解説・質問、スクロール追従、リクエストの中止
-content/image.js       画像の取得・縮小・Canvas上書き・原文切替・中止
+content/image.js       画像翻訳の開始・通信・中止のセッション管理
+content/image-codec.js  画像の取得・SVG変換・API向け縮小
+content/image-renderer.js 背景色推定・文字組み・翻訳Canvas生成
+content/image-layout.js 画像の配置・object-fit・ヘッダー遮蔽計算
+content/image-overlay.js Canvas表示・原文切替・スクロール追従・後片付け
 content/content.js     ページ翻訳の進行、MutationObserver による追い翻訳、メッセージ処理
 content/subtitle-timeline.js 字幕の時刻・バッチ・先読み範囲
 content/youtube.js     YouTube 字幕の開始/停止、先読み翻訳、再生同期
@@ -314,6 +318,8 @@ icons/                 y マーク（SVG / PNG、16〜128px）
 tools/                 構文チェック、アイコン・README 画像の生成
 tests/                 Chromium E2E、実 API 確認、テスト用 fixture
 ```
+
+画像用 content script は `manifest.json` の順序で読み込む classic script。`image-codec` → `image-renderer`、`image-layout` → `image-overlay`、最後にセッション管理の `image.js` を初期化する。background からの動的注入も同じ manifest の一覧を使う。
 
 ### テスト
 

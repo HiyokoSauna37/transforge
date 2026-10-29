@@ -30,7 +30,13 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/exclusions.js", "content/segmenter.js", "content/page.js", "content/context.js", "content/ui.js", "content/selection.js", "content/image.js", "content/content.js", "content/subtitle-timeline.js", "content/youtube-ui.js", "content/youtube.js"],
+      "js": [
+        "content/exclusions.js", "content/segmenter.js", "content/page.js",
+        "content/context.js", "content/ui.js", "content/selection.js",
+        "content/image-codec.js", "content/image-renderer.js", "content/image-layout.js",
+        "content/image-overlay.js", "content/image.js", "content/content.js",
+        "content/subtitle-timeline.js", "content/youtube-ui.js", "content/youtube.js"
+      ],
       "css": ["content/content.css"],
       "run_at": "document_idle"
     }
