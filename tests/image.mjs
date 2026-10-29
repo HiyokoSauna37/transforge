@@ -123,16 +123,18 @@ try {
     const headerRect = header.getBoundingClientRect();
     const frameRect = frame.getBoundingClientRect();
     return { overlaps: headerRect.bottom > frameRect.top && headerRect.top < frameRect.bottom,
-      overlayZ: Number(getComputedStyle(document.getElementById("tf-image-host")).zIndex), headerZ: Number(getComputedStyle(header).zIndex) };
+      overlayZ: Number(getComputedStyle(document.getElementById("tf-image-host")).zIndex),
+      contentZ: Number(getComputedStyle(document.body).zIndex), clipPath: frame.style.clipPath };
   });
   assert.equal(stacking.overlaps, true);
-  assert.ok(stacking.overlayZ < stacking.headerZ);
+  assert.ok(stacking.overlayZ > stacking.contentZ, "the translated canvas must stay above positioned page content");
+  assert.match(stacking.clipPath, /^inset\((?:5\d|60)(?:\.\d+)?px /, "the fixed header overlap must be clipped from the canvas");
   await page.evaluate(() => { document.getElementById("sticky-test").remove(); document.getElementById("scroll-spacer").remove(); scrollTo(0, 0); });
   await page.locator("#tf-image-host .toggle").click();
   assert.equal(await page.locator("#tf-image-host canvas.image").isVisible(), false);
   assert.equal(await page.locator("#tf-image-host .toggle").textContent(), "訳文");
   await page.locator("#tf-image-host .toggle").click();
-  check("translation keeps a shape's dominant background color and stays below overlapping sticky content without a modal");
+  check("translation stays above positioned images, clips overlapping sticky content and keeps the shape background color");
 
   await translate("data-image");
   await waitCanvas();

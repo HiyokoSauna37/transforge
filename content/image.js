@@ -365,11 +365,11 @@
   function imageOverlay(onClose) {
     const host = document.createElement("div");
     host.id = "tf-image-host";
-    // ページ直下の通常レイヤーに置く。固定ヘッダーなど、元画像を覆う要素の上には出さない。
-    host.style.cssText = "all:initial;position:absolute;left:0;top:0;width:0;height:0;z-index:1;pointer-events:none";
+    // サイト側の stacking context より前面に置き、固定ヘッダーとの交差部分だけを後で切り抜く。
+    host.style.cssText = "all:initial;position:fixed;inset:0;z-index:2147483646;pointer-events:none";
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<style>
-:host{all:initial}[hidden]{display:none!important}.frame{position:absolute;overflow:hidden;pointer-events:none;box-sizing:border-box}.image{position:absolute;display:block;pointer-events:none}.status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:calc(100% - 16px);padding:8px 12px;border-radius:10px;background:rgba(30,27,25,.9);color:#fff;font:600 12px/1.5 system-ui,sans-serif;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.24)}.status.busy::before{content:"";display:inline-block;width:11px;height:11px;margin-right:7px;vertical-align:-1px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}.status.error{background:rgba(132,38,38,.94)}.actions{position:absolute;right:7px;top:7px;display:flex;gap:5px;pointer-events:auto}.actions button{border:1px solid rgba(255,255,255,.42);border-radius:8px;background:rgba(30,27,25,.88);color:#fff;font:600 11px/1 system-ui,sans-serif;padding:7px 9px;box-shadow:0 2px 9px rgba(0,0,0,.22);cursor:pointer}.actions button:hover{background:rgba(70,61,56,.95)}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.status.busy::before{animation:none}}
+:host{all:initial}[hidden]{display:none!important}.frame{position:fixed;overflow:hidden;pointer-events:none;box-sizing:border-box}.image{position:absolute;display:block;pointer-events:none}.status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:calc(100% - 16px);padding:8px 12px;border-radius:10px;background:rgba(30,27,25,.9);color:#fff;font:600 12px/1.5 system-ui,sans-serif;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.24)}.status.busy::before{content:"";display:inline-block;width:11px;height:11px;margin-right:7px;vertical-align:-1px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}.status.error{background:rgba(132,38,38,.94)}.actions{position:absolute;right:7px;top:7px;display:flex;gap:5px;pointer-events:auto}.actions button{border:1px solid rgba(255,255,255,.42);border-radius:8px;background:rgba(30,27,25,.88);color:#fff;font:600 11px/1 system-ui,sans-serif;padding:7px 9px;box-shadow:0 2px 9px rgba(0,0,0,.22);cursor:pointer}.actions button:hover{background:rgba(70,61,56,.95)}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.status.busy::before{animation:none}}
 </style><div class="frame" hidden><canvas class="image" hidden></canvas><div class="status busy">画像を翻訳しています…</div><div class="actions" hidden><button class="toggle">原文</button><button class="close">戻す</button></div></div>`;
     document.documentElement.append(host);
     const frame = root.querySelector(".frame");
@@ -392,6 +392,48 @@
       return axis === "x" ? free / 2 : free / 2;
     };
 
+    const fixedLayer = (element) => {
+      for (let node = element; node instanceof HTMLElement && node !== document.documentElement; node = node.parentElement) {
+        if (node === source || node === host || node.getRootNode() === root) return null;
+        const position = getComputedStyle(node).position;
+        if (position === "fixed" || position === "sticky") return node;
+      }
+      return null;
+    };
+
+    function occlusionInsets(rect) {
+      const insets = { top: 0, right: 0, bottom: 0, left: 0 };
+      if (rect.width < 1 || rect.height < 1) return insets;
+      const clampX = value => Math.min(innerWidth - 1, Math.max(0, value));
+      const clampY = value => Math.min(innerHeight - 1, Math.max(0, value));
+      const xs = [rect.left + 1, rect.left + rect.width / 2, rect.right - 1].map(clampX);
+      const ys = [rect.top + 1, rect.top + rect.height / 2, rect.bottom - 1].map(clampY);
+      const layers = new Set();
+      for (const x of xs) for (const y of ys) {
+        const stack = document.elementsFromPoint(x, y);
+        const sourceIndex = stack.indexOf(source);
+        const candidates = sourceIndex < 0 ? stack.slice(0, 1) : stack.slice(0, sourceIndex);
+        for (const candidate of candidates) {
+          const layer = fixedLayer(candidate);
+          if (layer) layers.add(layer);
+        }
+      }
+      for (const layer of layers) {
+        const cover = layer.getBoundingClientRect();
+        const overlapWidth = Math.max(0, Math.min(rect.right, cover.right) - Math.max(rect.left, cover.left));
+        const overlapHeight = Math.max(0, Math.min(rect.bottom, cover.bottom) - Math.max(rect.top, cover.top));
+        if (overlapWidth >= rect.width / 2) {
+          if (cover.top <= rect.top + 1 && cover.bottom > rect.top) insets.top = Math.max(insets.top, cover.bottom - rect.top);
+          if (cover.bottom >= rect.bottom - 1 && cover.top < rect.bottom) insets.bottom = Math.max(insets.bottom, rect.bottom - cover.top);
+        }
+        if (overlapHeight >= rect.height / 2) {
+          if (cover.left <= rect.left + 1 && cover.right > rect.left) insets.left = Math.max(insets.left, cover.right - rect.left);
+          if (cover.right >= rect.right - 1 && cover.left < rect.right) insets.right = Math.max(insets.right, rect.right - cover.left);
+        }
+      }
+      return insets;
+    }
+
     function update() {
       if (!source?.isConnected) {
         if (source && !source.isConnected) close();
@@ -407,11 +449,16 @@
       const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
       const width = Math.max(1, (source.clientWidth - paddingLeft - paddingRight) * scaleX);
       const height = Math.max(1, (source.clientHeight - paddingTop - paddingBottom) * scaleY);
-      frame.style.left = `${window.scrollX + rect.left + (source.clientLeft + paddingLeft) * scaleX}px`;
-      frame.style.top = `${window.scrollY + rect.top + (source.clientTop + paddingTop) * scaleY}px`;
+      frame.style.left = `${rect.left + (source.clientLeft + paddingLeft) * scaleX}px`;
+      frame.style.top = `${rect.top + (source.clientTop + paddingTop) * scaleY}px`;
       frame.style.width = `${width}px`;
       frame.style.height = `${height}px`;
       frame.style.borderRadius = style.borderRadius;
+      const visible = occlusionInsets(frame.getBoundingClientRect());
+      frame.style.clipPath = Object.values(visible).some(Boolean)
+        ? `inset(${visible.top}px ${visible.right}px ${visible.bottom}px ${visible.left}px)` : "none";
+      actions.style.top = `${visible.top + 7}px`;
+      actions.style.right = `${visible.right + 7}px`;
       if (!translated) return;
       const intrinsicWidth = source.naturalWidth || translated.width;
       const intrinsicHeight = source.naturalHeight || translated.height;
@@ -444,11 +491,7 @@
       actions.hidden = true;
       clearInterval(timer);
       timer = setInterval(update, 180);
-      const rect = source.getBoundingClientRect();
-      frame.style.left = `${window.scrollX + rect.left}px`;
-      frame.style.top = `${window.scrollY + rect.top}px`;
-      frame.style.width = `${Math.max(1, rect.width)}px`;
-      frame.style.height = `${Math.max(1, rect.height)}px`;
+      update();
     }
 
     function show(rendered) {
