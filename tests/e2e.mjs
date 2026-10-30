@@ -64,6 +64,9 @@ const r1 = await page.evaluate(() => {
     notrans: q("#notrans").textContent,
     notrans2: q("#notrans2").textContent,
     hidden: q("#hidden").textContent,
+    hiddenContents: q("#hidden-contents").textContent,
+    contentsHeading: q("#contents-heading").textContent,
+    contentsBody: q("#contents-body").textContent,
     pre: q("#pre").textContent,
     listNested: q("#list ul li").textContent,
     tdType: [...document.querySelectorAll("#table td")].map((td) => td.textContent),
@@ -87,6 +90,8 @@ check(r1.brCount === 1 && r1.brText.includes("【First line】") && r1.brText.in
 check(r1.codeOnly === "only code", "code-only paragraph untouched", r1.codeOnly);
 check(r1.notrans === "Do not translate me" && r1.notrans2 === "Nor me", "translate=no / .notranslate untouched");
 check(r1.hidden === "Hidden paragraph should stay", "display:none untouched");
+check(r1.hiddenContents === "Hidden contents should stay", "display:contents inside display:none untouched");
+check(r1.contentsHeading === "【Visible article heading】" && r1.contentsBody === "【Visible article paragraph should translate.】", "display:contents article children translated");
 check(r1.pre.startsWith("<dependency>"), "<pre> untouched");
 check(r1.listNested === "【Nested item】", "nested list item translated", r1.listNested);
 check(r1.tdType[1] === "【String】" && r1.tdType[0].includes("bridgeErrorHandler"), "table cells translated", JSON.stringify(r1.tdType));
@@ -110,6 +115,10 @@ await page.evaluate(() => { const p = document.createElement("p"); p.id = "dyn";
 await page.waitForFunction(() => document.getElementById("dyn").textContent.includes("【"), null, { timeout: 5000 }).catch(() => {});
 check((await page.evaluate(() => document.getElementById("dyn").textContent)) === "【Dynamically added】", "dynamically added paragraph translated");
 
+await page.evaluate(() => { const p = document.createElement("p"); p.id = "dyn-contents"; p.textContent = "Dynamically added article text"; document.getElementById("display-contents").appendChild(p); });
+await page.waitForFunction(() => document.getElementById("dyn-contents").textContent.includes("【"), null, { timeout: 5000 }).catch(() => {});
+check((await page.evaluate(() => document.getElementById("dyn-contents").textContent)) === "【Dynamically added article text】", "dynamically added text inside display:contents translated");
+
 // 復元（details/dyn 追加後なので body 全体一致は不可 → 主要要素で確認）
 st = await msg(tabId, { type: "tf:restore" });
 check(st.status === "idle", "restore → idle");
@@ -118,10 +127,13 @@ const r2 = await page.evaluate(() => ({
   h1: document.querySelector("#h1").innerHTML,
   nested: document.querySelector("#nested").innerHTML,
   mixed: document.querySelector("#mixed").innerHTML,
+  contentsBody: document.querySelector("#contents-body").textContent,
+  dynContents: document.querySelector("#dyn-contents").textContent,
   trans: document.querySelectorAll("[data-tf]").length,
 }));
 check(r2.reorder === 'See <a href="/docs" id="l1">the documentation</a> for <a href="/details" id="l2">details</a>.', "restore: reordered paragraph back to original", r2.reorder);
 check(r2.h1 === "Component <em>Options</em>", "restore: h1 original", r2.h1);
+check(r2.contentsBody === "Visible article paragraph should translate." && r2.dynContents === "Dynamically added article text", "restore: display:contents article text original");
 check(r2.nested === 'Set the <a href="/opt"><code>as2From</code> header</a> to the <strong>sender</strong> value.', "restore: nested original", r2.nested);
 check(r2.trans === 1, "restore: only the UI host remains tagged", String(r2.trans));
 

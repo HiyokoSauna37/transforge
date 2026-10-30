@@ -77,7 +77,20 @@
 
   function visible(el) {
     if (typeof el.checkVisibility === "function") {
-      try { return el.checkVisibility({ visibilityProperty: true }); } catch { return true; }
+      try {
+        const style = getComputedStyle(el);
+        if (style.display !== "contents") return el.checkVisibility({ visibilityProperty: true });
+        // display:contents は自身の箱がないため checkVisibility() が false を返す。
+        // 子は表示されるので、非表示の祖先がない場合は探索を続ける。
+        if (style.visibility !== "visible" || style.contentVisibility === "hidden") return false;
+        let ancestor = el.parentElement || el.getRootNode()?.host;
+        while (ancestor && getComputedStyle(ancestor).display === "contents") {
+          const ancestorStyle = getComputedStyle(ancestor);
+          if (ancestorStyle.visibility !== "visible" || ancestorStyle.contentVisibility === "hidden") return false;
+          ancestor = ancestor.parentElement || ancestor.getRootNode()?.host;
+        }
+        return !ancestor || ancestor.checkVisibility({ visibilityProperty: true });
+      } catch { return true; }
     }
     return true;
   }
